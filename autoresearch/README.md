@@ -74,3 +74,17 @@ python -m unittest discover -s autoresearch/tests -v
 ```
 
 覆盖：状态机到 TESTED、预算拦截、重复指纹、非法云回包降级、重复失败升级、候选上限。
+
+## B 对接说明
+
+角色 B 的正式实现也在本包内：
+
+- `data.py`：CSV 接入、数据画像、`fwd5` 标签、时间切分与滚动特征；
+- `experiment.py`：`ResearchBackend` 实现 `DataPort` 的 `describe_data / baseline / run_candidate`；
+- `research_pv.py`：`ResearchPVPlanner` 实现 `PlannerPort` 的 `plan / interpret`；
+- `demo_data.py`：生成固定 seed 的 `data/demo_panel.csv`、`data/demo_split.json` 与 `data/sample.csv`。
+
+```bash
+python -m autoresearch.demo_data
+python -m unittest autoresearch.tests.test_b_tasks -v
+```

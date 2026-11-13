@@ -1,0 +1,36 @@
+{
+  "class_balance": {
+    "negative": 2205,
+    "positive": 2205,
+    "positive_ratio": 0.5
+  },
+  "data_hash": "sha256:f8982a2511a59160449a25744d6eb04190ead436f33badb1c4832ef4697acbe3",
+  "date_end": "2023-03-24",
+  "date_start": "2022-01-03",
+  "label_computable": 4410,
+  "label_computable_ratio": 0.984375,
+  "label_excluded": 70,
+  "label_horizon": 5,
+  "missing_rates": {
+    "close": 0.0,
+    "volume": 0.0
+  },
+  "rows": 4480,
+  "symbol_list": [
+    "S001",
+    "S002",
+    "S003",
+    "S004",
+    "S005",
+    "S006",
+    "S007",
+    "S008",
+    "S009",
+    "S010",
+    "S011",
+    "S012",
+    "S013",
+    "S014"
+  ],
+  "symbols": 14
+}
