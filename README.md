@@ -9,12 +9,14 @@ Research Agent System 的竞赛交付仓库：面向量价信号验证场景，�
 | `docs/ResearchAgent-系统设计-v5.md` | 系统设计 v5：AutoResearch 量价信号验证工作台 |
 | `docs/AutoResearch-四人分工执行手册.md` | 四人 A/B/C/D 分工、小时级排期、接口、测试、红线、演示 |
 | `framework/` | ARC agent 框架源码（agent-arc-based） |
+| `autoresearch/` | A 已实现的编排与推理模块：状态机、路由、预算门、契约 |
 
 ## 快速入口
 
 - 设计总览：[docs/ResearchAgent-系统设计-v5.md](docs/ResearchAgent-系统设计-v5.md)
 - 四人执行手册：[docs/AutoResearch-四人分工执行手册.md](docs/AutoResearch-四人分工执行手册.md)
 - ARC 框架说明：[framework/docs/EVOLUTION.md](framework/docs/EVOLUTION.md)
+- A 模块说明：[autoresearch/README.md](autoresearch/README.md)
 
 ## 上传注意
 
