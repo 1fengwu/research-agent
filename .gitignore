@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+.arc/
+**/__pycache__/
+*.pyc
+*.db
+node_modules/
+dist/
+.arc-test-db/
+.parallel/
+*.log
+.DS_Store
+
