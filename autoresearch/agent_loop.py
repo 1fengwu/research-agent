@@ -46,6 +46,7 @@ class EventWriter:
         self,
         event_type: str,
         phase: str,
+        run_id: str,
         *,
         decision_reason: str = "",
         experiment_id: str = "",
@@ -58,6 +59,7 @@ class EventWriter:
             event_type,
             phase,
             datetime.now(timezone.utc).isoformat(),
+            run_id,
             decision_reason=decision_reason,
             experiment_id=experiment_id,
             tokens=tokens,
@@ -90,6 +92,7 @@ class ResearchOrchestrator:
         *,
         run_id: Optional[str] = None,
         clock: Optional[Callable[[], float]] = None,
+        run_ledger_dir: Optional[str] = None,
     ) -> None:
         self.task = task
         self.data = data
@@ -99,6 +102,7 @@ class ResearchOrchestrator:
         self.ledger = ledger
         self.writer = writer or EventWriter()
         self.run_id = run_id or f"R{int(time.time() * 1000)}"
+        self.run_ledger_dir = run_ledger_dir
         self._clock = clock or time.monotonic
         self._started_wall = self._clock()
         self.router.event_cb = self._router_event
@@ -116,6 +120,7 @@ class ResearchOrchestrator:
         self.writer.append(
             event_type,
             phase,
+            self.run_id,
             decision_reason=reason,
             experiment_id=experiment_id,
             remaining=self.ledger.snapshot(),
@@ -133,6 +138,7 @@ class ResearchOrchestrator:
         self.writer.append(
             kind,
             phase,
+            self.run_id,
             decision_reason=reason,
             tokens=tokens,
             remaining=self.ledger.snapshot(),
@@ -183,11 +189,22 @@ class ResearchOrchestrator:
         *,
         test: bool = False,
     ) -> Verdict:
+        fingerprint = spec.fingerprint or experiment_fingerprint(
+            spec,
+            self.task.data_hash,
+            self.task.seed,
+            as_jsonable(self.task.split),
+        )
+        locked_config = {
+            "spec": as_jsonable(spec),
+            "trial": as_jsonable(trial),
+            "fingerprint": fingerprint,
+        }
         try:
             return self.oracle.judge(
                 run_id=self.run_id,
                 experiment_id=spec.experiment_id,
-                locked_config=as_jsonable(trial),
+                locked_config=locked_config,
                 test=test,
             )
         except Exception as exc:
@@ -243,19 +260,38 @@ class ResearchOrchestrator:
         above2 = trial.val2.auc > base
         return above1 != above2
 
+    def _candidate_viable(
+        self,
+        item: Dict[str, Any],
+        baseline_auc: float,
+    ) -> bool:
+        """PRD 0.01 rule: reject refuted/blocked and any window drop > 0.01."""
+        trial = item.get("trial") or {}
+        if trial.get("error"):
+            return False
+        verdict = str((item.get("verdict") or {}).get("verdict") or "inconclusive")
+        if verdict in {"refuted", "blocked"}:
+            return False
+        v1 = float((trial.get("val1") or {}).get("auc", 0.0))
+        v2 = float((trial.get("val2") or {}).get("auc", 0.0))
+        if baseline_auc > 0 and (v1 < baseline_auc - 0.01 or v2 < baseline_auc - 0.01):
+            return False
+        return True
+
     def _lock_best(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        baseline_auc = float(state.get("baseline", {}).get("merged_auc") or 0.0)
         records = [
             item
             for item in state.get("experiments", [])
-            if item.get("trial", {}).get("error") is None
+            if self._candidate_viable(item, baseline_auc)
         ]
         if not records:
             return {
                 "name": "baseline",
                 "config": state.get("baseline", {}).get("config") or {},
-                "merged_auc": state.get("baseline", {}).get("merged_auc"),
+                "merged_auc": baseline_auc,
                 "evidence_ids": list(state.get("evidence_ids", [])),
-                "reason": "no valid candidate; keep baseline",
+                "reason": "no viable candidate (refuted/blocked/window drop); keep baseline",
             }
 
         def merged(item: Dict[str, Any]) -> float:
@@ -266,14 +302,13 @@ class ResearchOrchestrator:
 
         best = max(records, key=merged)
         best_merged = merged(best)
-        baseline_auc = float(state.get("baseline", {}).get("merged_auc") or 0.0)
         if best_merged <= baseline_auc:
             return {
                 "name": "baseline",
                 "config": state.get("baseline", {}).get("config") or {},
                 "merged_auc": baseline_auc,
                 "evidence_ids": list(state.get("evidence_ids", [])),
-                "reason": "candidate did not beat baseline",
+                "reason": "viable candidate did not beat baseline",
             }
         return {
             "name": str(best.get("spec", {}).get("experiment_id", "candidate")),
@@ -283,8 +318,68 @@ class ResearchOrchestrator:
             "reason": f"best merged candidate auc={best_merged:.4f}",
         }
 
+    def _prepare_run_ledger(self) -> None:
+        """Give every run its own ledger so R2 does not inherit R1's spend."""
+        if self.run_ledger_dir is None:
+            return
+        path = Path(self.run_ledger_dir) / f"{self.run_id}.json"
+        self.ledger.reset(str(path))
+
+    def _locked_record(
+        self,
+        state: Dict[str, Any],
+        locked: Dict[str, Any],
+    ) -> tuple[ExperimentSpec, TrialResult]:
+        """Return the real locked spec and its trial for the final holdout test."""
+        if locked.get("name") == "baseline":
+            baseline = state.get("baseline", {})
+            config = baseline.get("config") or {}
+            locked_spec = ExperimentSpec(
+                experiment_id="baseline-locked",
+                hypothesis_id="LOCKED",
+                feature_set=str(config.get("feature_set") or "base"),
+                model=str(config.get("model") or "logistic"),
+                evidence_ids=list(state.get("evidence_ids", [])),
+                params=dict(config.get("params") or {}),
+                missing=str(config.get("missing") or "median"),
+                scaling=str(config.get("scaling") or "standard"),
+            )
+            return locked_spec, TrialResult(experiment_id=locked_spec.experiment_id)
+
+        locked_name = str(locked.get("name") or "")
+        for item in state.get("experiments", []):
+            spec_payload = item.get("spec") or {}
+            if str(spec_payload.get("experiment_id") or "") != locked_name:
+                continue
+            locked_spec = (
+                normalize_experiment_spec(spec_payload)
+                if isinstance(spec_payload, dict)
+                else spec_payload
+            )
+            trial_payload = item.get("trial") or {}
+            if isinstance(trial_payload, TrialResult):
+                locked_trial = trial_payload
+            elif isinstance(trial_payload, dict):
+                val1_data = trial_payload.get("val1") or {}
+                val2_data = trial_payload.get("val2") or {}
+                locked_trial = TrialResult(
+                    experiment_id=locked_spec.experiment_id,
+                    val1=TrialWindowResult(**val1_data),
+                    val2=TrialWindowResult(**val2_data),
+                    missing_rates=dict(trial_payload.get("missing_rates") or {}),
+                    seconds=float(trial_payload.get("seconds") or 0.0),
+                    error=trial_payload.get("error"),
+                )
+            else:
+                locked_trial = TrialResult(experiment_id=locked_spec.experiment_id)
+            return locked_spec, locked_trial
+
+        # The lock must always point at a recorded experiment; fail loudly if not.
+        raise ValueError(f"locked candidate {locked_name} has no experiment record")
+
     # --------------------------------------------------------------- main run
     def run(self) -> Dict[str, Any]:
+        self._prepare_run_ledger()
         self._emit(
             "research.run_started",
             PHASE_UNSEEN,
@@ -321,6 +416,31 @@ class ResearchOrchestrator:
             planned = []
             state["data_anomaly"] = True
             state["error_signatures"][f"plan_failed:{exc}"] = state["error_signatures"].get("plan_failed", 0) + 1
+            state["budget_snapshot"] = self.ledger.snapshot()
+            outcome = self.router.escalate_if_needed(state)
+            if outcome.get("escalated"):
+                state["escalation_attempts"] = int(state.get("escalation_attempts", 0)) + 1
+                if outcome.get("valid"):
+                    state = apply_reply(state, outcome["reply"])
+                    state["escalation_valid"] = int(state.get("escalation_valid", 0)) + 1
+                    state["data_anomaly"] = False
+                    self._emit(
+                        "research.revised",
+                        PHASE_REVISED,
+                        f"plan_failure_cloud_decision:{outcome['reply']['decision']}",
+                        extra={"reply": _short(outcome["reply"])},
+                    )
+                    try:
+                        planned = self._normalize_specs(
+                            self.planner.plan(self.task, self._view(state), "revised")
+                        )
+                    except Exception as replan_exc:
+                        self._emit(
+                            "research.escalation_failed",
+                            PHASE_REVISED,
+                            f"replan_failed:{replan_exc}",
+                        )
+                        planned = []
         for spec in planned:
             self._emit(
                 "research.hypothesis_registered",
@@ -483,19 +603,10 @@ class ResearchOrchestrator:
         tested = False
         test_verdict: Optional[Verdict] = None
         if self.ledger.can_finalize():
+            locked_spec, locked_trial = self._locked_record(state, locked)
             test_verdict = self._judge(
-                ExperimentSpec(
-                    experiment_id="locked-candidate",
-                    hypothesis_id="LOCKED",
-                    feature_set=str(locked.get("config", {}).get("feature_set", "locked")),
-                    model=str(locked.get("config", {}).get("model", "baseline")),
-                    evidence_ids=list(locked.get("evidence_ids", [])),
-                ),
-                TrialResult(
-                    experiment_id="locked-candidate",
-                    val1=TrialWindowResult(),
-                    val2=TrialWindowResult(),
-                ),
+                locked_spec,
+                locked_trial,
                 test=True,
             )
             tested = True
@@ -503,14 +614,16 @@ class ResearchOrchestrator:
                 "research.tested",
                 PHASE_TESTED,
                 f"verdict:{test_verdict.verdict}",
-                experiment_id="locked-candidate",
-                extra={"verdict": as_jsonable(test_verdict)},
+                experiment_id=locked_spec.experiment_id,
+                extra={
+                    "verdict": as_jsonable(test_verdict),
+                    "locked_spec": _short(as_jsonable(locked_spec)),
+                },
             )
             final_phase = PHASE_TESTED
         else:
             final_phase = PHASE_PARTIAL
-            if stop is None:
-                stop = "partial_completed"
+            stop = "partial_completed"
 
         summary = {
             "run_id": self.run_id,

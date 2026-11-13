@@ -8,8 +8,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from autoresearch.agent_loop import EventWriter, ResearchOrchestrator
-from autoresearch.budget_gate import BudgetGate
+from autoresearch.budget_gate import BudgetBlocked, BudgetGate
 from autoresearch.contracts import (
+    BudgetSpec,
     ExperimentSpec,
     TaskSpec,
     TrialResult,
@@ -103,6 +104,7 @@ class FakeOracle:
         self.baseline_auc = baseline_auc
         self.calls = 0
         self.test_calls = 0
+        self.last_locked_config: Optional[Dict[str, Any]] = None
 
     def judge(
         self,
@@ -113,8 +115,12 @@ class FakeOracle:
         test: bool = False,
     ) -> Verdict:
         self.calls += 1
+        spec = locked_config.get("spec") if isinstance(locked_config, dict) else None
+        trial = locked_config.get("trial") if isinstance(locked_config, dict) else locked_config
+        trial = trial or locked_config or {}
         if test:
             self.test_calls += 1
+            self.last_locked_config = dict(locked_config or {})
             return Verdict(
                 verdict="supported",
                 metric={"auc": 0.65, "valid_days": 200, "excluded": 50},
@@ -122,14 +128,14 @@ class FakeOracle:
                 tokens=0,
                 test=True,
             )
-        if locked_config.get("error"):
+        if trial.get("error"):
             return Verdict(
                 verdict="blocked",
-                metric={"error": locked_config["error"]},
+                metric={"error": trial["error"]},
                 test=test,
             )
-        v1 = float((locked_config.get("val1") or {}).get("auc", 0.0))
-        v2 = float((locked_config.get("val2") or {}).get("auc", 0.0))
+        v1 = float((trial.get("val1") or {}).get("auc", 0.0))
+        v2 = float((trial.get("val2") or {}).get("auc", 0.0))
         merged = (v1 + v2) / 2.0
         if merged > self.baseline_auc + 0.001:
             verdict = "supported"
@@ -170,6 +176,42 @@ class FakePlanner:
         trial = feedback.get("trial") or {}
         experiment_id = str(trial.get("experiment_id") or "")
         return [dict(x) for x in self.signals_by_experiment.get(experiment_id, [])]
+
+
+class RefutingOracle(FakeOracle):
+    """Every validation verdict is refuted so A must not lock the candidate."""
+
+    def judge(
+        self,
+        *,
+        run_id: str,
+        experiment_id: str,
+        locked_config: Dict[str, Any],
+        test: bool = False,
+    ) -> Verdict:
+        if test:
+            return super().judge(
+                run_id=run_id,
+                experiment_id=experiment_id,
+                locked_config=locked_config,
+                test=True,
+            )
+        return Verdict(
+            verdict="refuted",
+            metric={"reason": "ci excludes zero in the wrong direction"},
+            checks=["paired_bootstrap_ci"],
+            test=test,
+        )
+
+
+class FailingOncePlanner(FakePlanner):
+    """First plan call fails; the revised call after escalation returns specs."""
+
+    def plan(self, task: TaskSpec, view: Dict[str, Any], run_kind: str) -> List[ExperimentSpec]:
+        self.plan_calls += 1
+        if run_kind == "first":
+            raise RuntimeError("planner crashed before pre-registration")
+        return list(self.specs)
 
 
 def spec(experiment_id: str, feature_set: str = "+volatility", model: str = "logistic") -> ExperimentSpec:
@@ -231,7 +273,7 @@ def make_orchestrator(
     client: Optional[FakeCloudClient] = None,
     clock=None,
 ):
-    ledger = BudgetGate(task.budget, ledger_path=os.path.join(folder, "token_ledger.json"), clock=clock)
+    ledger = BudgetGate(task.budget, clock=clock)
     router = ResearchRouter(ledger, client=client, event_cb=None)
     oracle = FakeOracle()
     writer = EventWriter(os.path.join(folder, "events.jsonl"))
@@ -244,6 +286,7 @@ def make_orchestrator(
         ledger=ledger,
         writer=writer,
         clock=clock,
+        run_ledger_dir=folder,
     )
     return orchestrator, ledger, writer, oracle
 
@@ -367,6 +410,153 @@ class AgentATest(unittest.TestCase):
             summary = orchestrator.run()
             self.assertEqual(len(data.calls), 2)
             self.assertEqual(summary["stop_reason"], "candidate_budget")
+
+
+    def test_refuted_candidate_not_locked(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            task = make_task(folder)
+            specs = [spec("exp-001", "+volatility")]
+            data = FakeData({"exp-001": good_result("exp-001")})
+            orchestrator, ledger, writer, oracle = make_orchestrator(
+                folder, task, data, FakePlanner(specs), clock=lambda: 0.0
+            )
+            orchestrator.oracle = RefutingOracle()
+            summary = orchestrator.run()
+            self.assertEqual(summary["locked"]["name"], "baseline")
+            self.assertIn("no viable candidate", summary["locked"]["reason"])
+            self.assertEqual(
+                [x["verdict"]["verdict"] for x in summary["experiments"]],
+                ["refuted"],
+            )
+
+    def test_window_drop_rule_rejects_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            task = make_task(folder)
+            drop_result = {
+                "val1": {"auc": 0.71, "valid_days": 100, "excluded": 20},
+                "val2": {"auc": 0.55, "valid_days": 100, "excluded": 20},
+                "missing_rates": {"volume": 0.02},
+                "seconds": 2.5,
+            }
+            data = FakeData({"exp-001": drop_result})
+            specs = [spec("exp-001", "+volume")]
+            orchestrator, ledger, writer, oracle = make_orchestrator(
+                folder, task, data, FakePlanner(specs), clock=lambda: 0.0
+            )
+            summary = orchestrator.run()
+            self.assertEqual(summary["locked"]["name"], "baseline")
+            self.assertIn("no viable candidate", summary["locked"]["reason"])
+
+    def test_final_test_receives_real_locked_config(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            task = make_task(folder)
+            specs = [spec("exp-001", "+volatility")]
+            data = FakeData({"exp-001": good_result("exp-001")})
+            orchestrator, ledger, writer, oracle = make_orchestrator(
+                folder, task, data, FakePlanner(specs), clock=lambda: 0.0
+            )
+            summary = orchestrator.run()
+            self.assertIsNotNone(oracle.last_locked_config)
+            locked_spec = oracle.last_locked_config["spec"]
+            self.assertEqual(locked_spec["experiment_id"], "exp-001")
+            self.assertEqual(locked_spec["feature_set"], "+volatility")
+            self.assertTrue(oracle.last_locked_config["fingerprint"])
+            self.assertEqual(oracle.last_locked_config["trial"]["experiment_id"], "exp-001")
+            self.assertTrue(summary["test_verdict"]["test"])
+
+    def test_second_run_uses_fresh_per_run_ledger(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            task = make_task(folder, budget={"candidates": 1})
+            specs = [spec("exp-001", "+volatility")]
+            data = FakeData({"exp-001": good_result("exp-001")})
+            client = FakeCloudClient()
+            ledger = BudgetGate(task.budget, clock=lambda: 0.0)
+
+            def build(run_id: str, events_name: str) -> ResearchOrchestrator:
+                router = ResearchRouter(ledger, client=client)
+                writer = EventWriter(os.path.join(folder, events_name))
+                return ResearchOrchestrator(
+                    task,
+                    data=data,
+                    oracle=FakeOracle(),
+                    planner=FakePlanner(specs),
+                    router=router,
+                    ledger=ledger,
+                    writer=writer,
+                    run_id=run_id,
+                    run_ledger_dir=folder,
+                    clock=lambda: 0.0,
+                )
+
+            o1 = build("R1", "events1.jsonl")
+            o1.run()
+            o2 = build("R2", "events2.jsonl")
+            summary2 = o2.run()
+            self.assertEqual(len(summary2["experiments"]), 1)
+            self.assertEqual(summary2["budget"]["used_candidates"], 1)
+            self.assertTrue(summary2["tested"])
+            self.assertEqual(ledger.path.name, "R2.json")
+
+    def test_partial_completed_reason_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            task = make_task(
+                folder,
+                budget={"cloud_tokens": 100, "reserve_tokens": 1200},
+            )
+            specs = [spec("exp-001", "+volatility")]
+            data = FakeData({"exp-001": good_result("exp-001")})
+            orchestrator, ledger, writer, oracle = make_orchestrator(
+                folder, task, data, FakePlanner(specs), clock=lambda: 0.0
+            )
+            summary = orchestrator.run()
+            self.assertEqual(summary["phase"], "PARTIAL_COMPLETED")
+            self.assertEqual(summary["stop_reason"], "partial_completed")
+            self.assertFalse(summary["tested"])
+            self.assertTrue(
+                any(
+                    e["type"] == "research.completed"
+                    and e["decision_reason"] == "stop_reason:partial_completed"
+                    for e in events(folder)
+                )
+            )
+
+    def test_plan_failure_escalates_and_replans(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            task = make_task(folder)
+            specs = [spec("exp-001", "+volatility")]
+            data = FakeData({"exp-001": good_result("exp-001")})
+            client = FakeCloudClient()
+            orchestrator, ledger, writer, oracle = make_orchestrator(
+                folder,
+                task,
+                data,
+                FailingOncePlanner(specs),
+                client=client,
+                clock=lambda: 0.0,
+            )
+            summary = orchestrator.run()
+            self.assertGreaterEqual(client.calls, 1)
+            self.assertGreaterEqual(summary["escalation_attempts"], 1)
+            self.assertGreaterEqual(summary["escalation_valid"], 1)
+            self.assertTrue(
+                any(
+                    e["type"] == "research.revised"
+                    and "plan_failure_cloud_decision" in e["decision_reason"]
+                    for e in events(folder)
+                )
+            )
+            self.assertEqual(data.calls, ["exp-001"])
+            self.assertTrue(summary["tested"])
+
+    def test_preflight_reserves_tokens(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            gate = BudgetGate(
+                BudgetSpec(cloud_tokens=100, reserve_tokens=80),
+                clock=lambda: 0.0,
+            )
+            with self.assertRaises(BudgetBlocked) as context:
+                gate.preflight_cloud(30, 60)
+            self.assertIn("reserve", context.exception.reason)
 
 
 if __name__ == "__main__":

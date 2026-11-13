@@ -51,6 +51,19 @@ class BudgetGate:
         self._entries: list[Dict[str, Any]] = []
         self._load()
 
+    def reset(self, path: Optional[str] = None) -> None:
+        """Start a fresh per-run ledger at an optional path."""
+        with self._lock:
+            self.path = Path(path) if path else self.path
+            self._started = self._clock()
+            self._used_candidates = 0
+            self._used_cloud_calls = 0
+            self._used_cloud_tokens = 0
+            self._entries = []
+            if self.path is not None:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                self._save()
+
     def _load(self) -> None:
         if self.path is None or not self.path.exists():
             return
@@ -140,10 +153,17 @@ class BudgetGate:
         needed = input_tokens + max_output_tokens
         remaining_tokens = self.remaining_tokens()
         remaining_seconds = self.remaining_seconds()
+        available_after_reserve = remaining_tokens - self.limits.reserve_tokens
         if remaining_tokens <= 0:
             raise BudgetBlocked("cloud_tokens_exhausted")
+        if available_after_reserve <= 0:
+            raise BudgetBlocked("cloud_token_reserve_exhausted")
         if needed > remaining_tokens:
             raise BudgetBlocked(f"cloud_call_need_{needed}_remaining_{remaining_tokens}")
+        if needed > available_after_reserve:
+            raise BudgetBlocked(
+                f"cloud_call_need_{needed}_available_after_reserve_{available_after_reserve}"
+            )
         if remaining_seconds <= self.limits.reserve_seconds:
             raise BudgetBlocked("time_reserve_reached")
         return {
@@ -151,6 +171,7 @@ class BudgetGate:
             "max_output": max_output_tokens,
             "needed": needed,
             "remaining_tokens": remaining_tokens,
+            "available_after_reserve": available_after_reserve,
             "remaining_seconds": remaining_seconds,
         }
 

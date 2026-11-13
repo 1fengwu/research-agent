@@ -86,6 +86,7 @@ class RunEvent:
     type: str
     phase: str
     timestamp: str
+    run_id: str
     decision_reason: str = ""
     experiment_id: str = ""
     tokens: Dict[str, Any] = field(default_factory=dict)
@@ -221,6 +222,7 @@ def build_run_event(
     event_type: str,
     phase: str,
     timestamp: str,
+    run_id: str,
     *,
     decision_reason: str = "",
     experiment_id: str = "",
@@ -232,6 +234,7 @@ def build_run_event(
         type=event_type,
         phase=phase,
         timestamp=timestamp,
+        run_id=run_id,
         decision_reason=decision_reason,
         experiment_id=experiment_id,
         tokens=dict(tokens or {}),

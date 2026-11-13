@@ -231,12 +231,18 @@ class ResearchRouter:
         phase = str(state.get("phase") or "UNSEEN")
         summary = build_compact_summary(state)
         input_est = estimate_tokens(summary)
-        max_out = max(
-            0,
-            min(self.max_output_tokens, self.ledger.remaining_tokens() - 1),
+        usable = self.ledger.remaining_tokens() - self.ledger.limits.reserve_tokens
+        max_out = (
+            max(0, min(self.max_output_tokens, usable - input_est))
+            if usable > 0
+            else 0
         )
         if max_out <= 0:
-            note = "cloud_tokens_exhausted"
+            note = (
+                "cloud_token_reserve_exhausted"
+                if usable <= 0
+                else "cloud_tokens_exhausted"
+            )
             self._emit("research.escalation_blocked", phase, note, extra={"trigger": reasons})
             return {
                 "escalated": True,

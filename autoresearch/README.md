@@ -17,7 +17,7 @@ A 不碰：holdout、实验评分、特征工程、verdicts 写入、UI 业务�
 - `ExperimentSpec`：假设编号、证据引用、特征组、模型、参数、缺失/缩放处理；
 - `TrialResult`：两个验证窗、有效天数、排除数、缺失率、耗时、错误；
 - `Verdict`：`supported / refuted / inconclusive / blocked / partial_completed`；
-- `RunEvent`：类型、阶段、时间戳、决策原因、实验编号、token、剩余预算。
+- `RunEvent`：类型、阶段、时间戳、`run_id`、决策原因、实验编号、token、剩余预算。
 
 任务启动前先 `load_task_spec`，契约不合法就拒绝开工。
 
@@ -56,13 +56,16 @@ from autoresearch.agent_loop import EventWriter, ResearchOrchestrator
 from autoresearch.budget_gate import BudgetGate
 from autoresearch.llm_router import ResearchRouter, HttpJsonCloudClient
 
-ledger = BudgetGate(task.budget, ledger_path=".arc/token_ledger.json")
+ledger = BudgetGate(task.budget)
 router = ResearchRouter(ledger, client=HttpJsonCloudClient())  # 或 NullCloudClient 离线
 orchestrator = ResearchOrchestrator(task, data=DataPort(), oracle=OraclePort(),
                                     planner=PlannerPort(), router=router,
-                                    ledger=ledger, writer=EventWriter())
+                                    ledger=ledger, writer=EventWriter(),
+                                    run_ledger_dir=".arc/ledgers")
 summary = orchestrator.run()
 ```
+
+每次 `run()` 会先把 ledger 重置为 `.arc/ledgers/<run_id>.json`，R2 不会继承 R1 的预算；事件流用 `run_id` 区分多轮运行。
 
 ## 测试
 

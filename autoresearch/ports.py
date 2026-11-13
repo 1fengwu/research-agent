@@ -36,6 +36,10 @@ class OraclePort(Protocol):
     ) -> Verdict:
         """Return supported/refuted/inconclusive/blocked/partial_completed.
 
+        `locked_config` is `{"spec": ExperimentSpec, "trial": TrialResult,
+        "fingerprint": str}` so the judge can validate both the planned
+        configuration and the observed validation windows.
+
         `test=True` is allowed only once after the run is locked.
         """
         ...
