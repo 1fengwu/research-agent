@@ -82,6 +82,7 @@ class TestDMockEvents(unittest.TestCase):
         self.assertEqual(rows[0]["label"], "进化前（第 1 轮）")
         self.assertIn("进化后", rows[1]["label"])
         self.assertIn("used_cloud_tokens", rows[0])
+        self.assertIn("test_auc", rows[0])
 
     def test_track_results_are_visual_not_code(self) -> None:
         events = report.load_events(MOCK_EVENTS)
@@ -158,6 +159,38 @@ class TestUIHelpers(unittest.TestCase):
         text = ui.reason_text("budget_blocked:cloud_token_reserve_exhausted")
         self.assertIn("预算不足", text)
         self.assertIn("预留云 token 不足", text)
+
+    def test_code_labels_are_natural_language(self) -> None:
+        self.assertEqual(ui.budget_mode_text("economy"), "省流预算")
+        self.assertEqual(ui.usage_source_text("offline_simulated"), "离线模拟")
+        self.assertEqual(ui.status_text("match"), "一致")
+
+    def test_replay_checks_are_natural_language(self) -> None:
+        self.assertEqual(ui.replay_check_text("data_hash_match"), "数据哈希一致")
+        self.assertEqual(ui.replay_check_text("replay_offline_no_cloud"), "复现过程未调用云模型")
+        detail = ui.replay_detail_text("recorded=0.6 replay=0.6")
+        self.assertIn("原始记录", detail)
+        self.assertIn("复现结果", detail)
+
+    def test_hypothesis_round_is_simple(self) -> None:
+        self.assertEqual(ui.hypothesis_label("tree_shallow"), "浅层树")
+        html = ui.hypothesis_round_html(
+            {
+                "experiments": [
+                    {
+                        "experiment_id": "exp-004",
+                        "hypothesis_id": "tree_shallow",
+                        "verdict": {"verdict": "supported"},
+                        "trial": {
+                            "val1": {"auc": 0.67, "valid_days": 46, "excluded": 0},
+                            "val2": {"auc": 0.68, "valid_days": 46, "excluded": 0},
+                        },
+                    }
+                ]
+            }
+        )
+        self.assertIn("假设成立，可以保留", html)
+        self.assertIn("验证窗 AUC", html)
 
 
 class TestDReport(unittest.TestCase):

@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import html
 import os
 import subprocess
 import sys
@@ -454,29 +455,35 @@ def _inject_styles() -> None:
     css = """
 <style>
 :root {
-  --ar-bg: #0A0E14;
-  --ar-panel: rgba(15, 23, 42, 0.55);
-  --ar-panel-2: rgba(10, 14, 20, 0.72);
-  --ar-ink: #a78bfa;
-  --ar-muted: #a78bfa;
-  --ar-faint: #a78bfa;
+  --ar-bg: #F7F8FA;
+  --ar-panel: rgba(255, 255, 255, 0.86);
+  --ar-panel-2: #F0F2F7;
+  --ar-ink: #1F2328;
+  --ar-muted: #4A5160;
+  --ar-faint: #4A5160;
   --ar-gold: #a855f7;
   --ar-patina: #3b82f6;
   --ar-vermil: #f87171;
-  --ar-line: rgba(139, 92, 246, 0.35);
+  --ar-line: rgba(139, 92, 246, 0.18);
   --ar-radius: 6px;
 }
 
 html, body {
   background: var(--ar-bg);
   color: var(--ar-ink);
-  font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  font-family: "Microsoft YaHei UI", "PingFang SC", "HarmonyOS Sans SC", "Noto Sans SC", "Segoe UI", sans-serif;
+  font-size: 15.5px;
+  line-height: 1.7;
+  letter-spacing: 0.01em;
 }
 
 [data-testid="stAppViewContainer"] {
   background: transparent;
   color: var(--ar-ink);
-  font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  font-family: "Microsoft YaHei UI", "PingFang SC", "HarmonyOS Sans SC", "Noto Sans SC", "Segoe UI", sans-serif;
+  font-size: 15.5px;
+  line-height: 1.7;
+  letter-spacing: 0.01em;
 }
 
 .ar-bg {
@@ -486,7 +493,7 @@ html, body {
   pointer-events: none;
   background-color: var(--ar-bg);
   background-image:
-    linear-gradient(180deg, rgba(10, 14, 20, 0.30), rgba(10, 14, 20, 0.88)),
+    linear-gradient(180deg, rgba(247, 248, 250, 0.00), rgba(255, 255, 255, 0.92)),
     url("data:image/svg+xml,__TECH_GRID__"),
     url("data:image/svg+xml,__TECH_SIGNAL__");
   background-size: cover, 56px 56px, 720px 420px;
@@ -503,22 +510,33 @@ html, body {
 }
 
 h1, h2, h3 {
-  color: #a78bfa;
-  letter-spacing: 0;
+  color: #1F2328;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 p, li, label, [data-testid="stMarkdownContainer"] {
-  color: #a78bfa;
+  color: #1F2328;
+  font-weight: 450;
+  letter-spacing: 0.01em;
+  line-height: 1.7;
 }
 
 [data-testid="stSidebar"] {
-  background: rgba(15, 23, 42, 0.55);
+  background: rgba(255, 255, 255, 0.72);
   border-right: 1px solid var(--ar-line);
   box-shadow: 0 0 15px rgba(138, 43, 226, 0.28);
+  font-size: 15px;
+  line-height: 1.6;
 }
 
 [data-testid="stSidebar"] * {
   color: var(--ar-ink);
+}
+
+code, pre, [data-testid="stDataFrame"], [data-testid="stTable"], [data-testid="stCodeBlock"], [data-testid="stCaptionContainer"] {
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 14px;
 }
 
 .ar-hero {
@@ -579,12 +597,12 @@ p, li, label, [data-testid="stMarkdownContainer"] {
 }
 
 [data-testid="stMetricValue"] {
-  color: var(--ar-ink);
+  color: #1F2328;
   font-weight: 600;
 }
 
 [data-testid="stMetricLabel"] {
-  color: var(--ar-muted);
+  color: #4A5160;
 }
 
 [data-testid="stDataFrame"],
@@ -733,6 +751,14 @@ p, li, label, [data-testid="stMarkdownContainer"] {
   line-height: 1.45;
 }
 
+.ar-stop-reason {
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+  white-space: normal;
+  color: var(--ar-muted);
+}
+
 .ar-exp-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -810,6 +836,46 @@ p, li, label, [data-testid="stMarkdownContainer"] {
   margin-top: 0.55rem;
 }
 
+.ar-hyp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.6rem;
+}
+
+.ar-hyp-item {
+  background: var(--ar-panel);
+  border: 1px solid var(--ar-line);
+  border-left-width: 3px;
+  border-radius: var(--ar-radius);
+  padding: 0.7rem 0.8rem;
+  box-shadow: 0 0 10px rgba(138, 43, 226, 0.18);
+}
+
+.ar-hyp-title {
+  font-weight: 600;
+  color: #1F2328;
+  margin-bottom: 0.2rem;
+}
+
+.ar-hyp-auc {
+  color: #4A5160;
+  font-size: 0.8rem;
+  margin: 0.2rem 0;
+}
+
+.ar-hyp-conclusion {
+  color: #4A5160;
+  font-size: 0.75rem;
+}
+
+.ar-hyp-round-empty {
+  color: #4A5160;
+  font-size: 0.8rem;
+  border: 1px dashed var(--ar-line);
+  border-radius: var(--ar-radius);
+  padding: 0.7rem;
+}
+
 .ar-chip-row {
   display: flex;
   flex-wrap: wrap;
@@ -881,8 +947,8 @@ def _token_line_chart(token_frame: pd.DataFrame):
         .configure_view(stroke=None)
         .configure_axis(
             grid=False,
-            labelColor="#a78bfa",
-            titleColor="#a78bfa",
+            labelColor="#4A5160",
+            titleColor="#1F2328",
             domainColor="rgba(139,92,246,.24)",
         )
         .configure_axisY(
@@ -890,7 +956,7 @@ def _token_line_chart(token_frame: pd.DataFrame):
             gridColor="rgba(139,92,246,.10)",
             gridDash=[2, 2],
         )
-        .configure_legend(labelColor="#a78bfa", titleColor="#a78bfa")
+        .configure_legend(labelColor="#4A5160", titleColor="#1F2328")
     )
 
 
@@ -921,8 +987,8 @@ def _token_event_bar(cloud_only: pd.DataFrame):
         .configure_view(stroke=None)
         .configure_axis(
             grid=False,
-            labelColor="#a78bfa",
-            titleColor="#a78bfa",
+            labelColor="#4A5160",
+            titleColor="#1F2328",
             domainColor="rgba(139,92,246,.24)",
         )
         .configure_axisX(
@@ -930,7 +996,7 @@ def _token_event_bar(cloud_only: pd.DataFrame):
             gridColor="rgba(139,92,246,.10)",
             gridDash=[2, 2],
         )
-        .configure_legend(labelColor="#a78bfa", titleColor="#a78bfa")
+        .configure_legend(labelColor="#4A5160", titleColor="#1F2328")
     )
 
 
@@ -961,12 +1027,42 @@ def _comparison_charts(comparison: pd.DataFrame):
         )
         .properties(height=220)
     )
+    time_chart = (
+        alt.Chart(comparison)
+        .mark_bar(size=22)
+        .encode(
+            x=alt.X("elapsed_seconds:Q", title="运行时间（秒）"),
+            y=alt.Y("label:N", title="", sort=None),
+            color=alt.condition(
+                alt.datum.label == "进化前（第 1 轮）",
+                alt.value("#64748b"),
+                alt.value("#3b82f6"),
+            ),
+            tooltip=["label", "run_id", "elapsed_seconds"],
+        )
+        .properties(height=220)
+    )
+    auc_chart = (
+        alt.Chart(comparison)
+        .mark_bar(size=22)
+        .encode(
+            x=alt.X("test_auc:Q", title="独立测试 AUC"),
+            y=alt.Y("label:N", title="", sort=None),
+            color=alt.condition(
+                alt.datum.label == "进化前（第 1 轮）",
+                alt.value("#64748b"),
+                alt.value("#22d3ee"),
+            ),
+            tooltip=["label", "run_id", "test_auc"],
+        )
+        .properties(height=220)
+    )
     return (
         token_chart.configure_view(stroke=None)
         .configure_axis(
             grid=False,
-            labelColor="#a78bfa",
-            titleColor="#a78bfa",
+            labelColor="#4A5160",
+            titleColor="#1F2328",
             domainColor="rgba(139,92,246,.24)",
         )
         .configure_axisX(
@@ -977,8 +1073,32 @@ def _comparison_charts(comparison: pd.DataFrame):
         calls_chart.configure_view(stroke=None)
         .configure_axis(
             grid=False,
-            labelColor="#a78bfa",
-            titleColor="#a78bfa",
+            labelColor="#4A5160",
+            titleColor="#1F2328",
+            domainColor="rgba(139,92,246,.24)",
+        )
+        .configure_axisX(
+            grid=True,
+            gridColor="rgba(139,92,246,.10)",
+            gridDash=[2, 2],
+        ),
+        time_chart.configure_view(stroke=None)
+        .configure_axis(
+            grid=False,
+            labelColor="#4A5160",
+            titleColor="#1F2328",
+            domainColor="rgba(139,92,246,.24)",
+        )
+        .configure_axisX(
+            grid=True,
+            gridColor="rgba(139,92,246,.10)",
+            gridDash=[2, 2],
+        ),
+        auc_chart.configure_view(stroke=None)
+        .configure_axis(
+            grid=False,
+            labelColor="#4A5160",
+            titleColor="#1F2328",
             domainColor="rgba(139,92,246,.24)",
         )
         .configure_axisX(
@@ -1001,8 +1121,11 @@ def _render_track(summary: Dict[str, Any]) -> None:
             None,
         )
         with st.expander("云决策 %d" % index + (" · 建议 %s" % selected if selected else "")):
-            st.write(event.get("decision_reason", ""))
-            st.write("触发依据", ", ".join(extra.get("trigger") or []))
+            st.write(ui_mod.reason_text(event.get("decision_reason")))
+            st.write(
+                "触发依据",
+                ", ".join(ui_mod.reason_text(item) for item in extra.get("trigger") or []),
+            )
             st.write("证据", ", ".join(extra.get("evidence_ids") or []))
             charged = (event.get("tokens") or {}).get("charged")
             if charged is not None:
@@ -1016,7 +1139,7 @@ def _render_track(summary: Dict[str, Any]) -> None:
                     verdict = experiment.get("verdict") or {}
                     st.write("对应实验已执行" if experiment.get("started") else "对应实验尚未执行")
                     if verdict.get("verdict"):
-                        st.write("验证裁决", verdict["verdict"])
+                        st.write("验证裁决", ui_mod.verdict_label(verdict["verdict"]))
     budget = summary.get("budget") or {}
     left, right = st.columns([2, 1])
     with left:
@@ -1028,12 +1151,12 @@ def _render_track(summary: Dict[str, Any]) -> None:
     with right:
         st.markdown("**预算与状态**")
         st.markdown(
-            "**阶段**：%s `%s`  \n**停止原因**：`%s`"
+            "**阶段**：%s  \n**停止原因**：<span class=\"ar-stop-reason\">%s</span>"
             % (
                 ui_mod.phase_label(summary.get("phase")),
-                summary.get("phase") or "",
-                summary.get("stop_reason") or "—",
-            )
+                html.escape(ui_mod.reason_text(summary.get("stop_reason"))),
+            ),
+            unsafe_allow_html=True,
         )
         task_budget = (summary.get("task") or {}).get("budget") or {}
         stats = ui_mod.experiment_summary(summary)
@@ -1056,7 +1179,10 @@ def _render_track(summary: Dict[str, Any]) -> None:
                 stats["refuted"],
             )
         )
-        st.caption("预算模式：%s" % str(budget.get("mode") or summary.get("budget_mode") or "—"))
+        st.caption(
+            "预算模式：%s"
+            % ui_mod.budget_mode_text(budget.get("mode") or summary.get("budget_mode"))
+        )
 
     token_rows = report_mod.token_usage_series(summary)
     if token_rows:
@@ -1141,36 +1267,118 @@ def _render_review(
         st.markdown("**三臂对照指标**")
         source_note = "内置 mock 数据" if (metrics or {}).get("source") == "mock" else "真实运行数据"
         st.caption("数据来源：%s" % source_note)
-        st.dataframe(pd.DataFrame(arms), use_container_width=True)
+        arms_df = pd.DataFrame(arms)
+        if "usage_source" in arms_df:
+            arms_df["usage_source"] = arms_df["usage_source"].map(ui_mod.usage_source_text)
+        if "phase" in arms_df:
+            arms_df["phase"] = arms_df["phase"].map(ui_mod.phase_label)
+        st.dataframe(arms_df, use_container_width=True)
     else:
         st.caption("未找到 metrics.json，三臂对照暂不可用。")
 
     if runs:
         comparison = pd.DataFrame(report_mod.run_token_comparison(runs))
         if not comparison.empty:
-            st.markdown("**运行轮次 Token 对比（进化前后）**")
-            token_chart, calls_chart = _comparison_charts(comparison)
-            chart_left, chart_right = st.columns(2)
-            with chart_left:
-                st.altair_chart(token_chart, use_container_width=True)
-            with chart_right:
-                st.altair_chart(calls_chart, use_container_width=True)
-            st.dataframe(
-                comparison[
-                    [
-                        "label",
-                        "run_id",
-                        "phase",
-                        "used_cloud_tokens",
-                        "cloud_calls",
-                        "candidates",
-                        "elapsed_seconds",
-                        "tested",
-                        "stop_reason",
-                    ]
-                ],
-                use_container_width=True,
-            )
+            st.markdown("**智能体进化前后对比（直观版）**")
+            if len(comparison) >= 2:
+                first = comparison.iloc[0]
+                savings_run = comparison.loc[comparison["used_cloud_tokens"].idxmin()]
+                completion_run = comparison.loc[comparison["candidates"].idxmax()]
+                token_saved = max(0, int(first["used_cloud_tokens"]) - int(savings_run["used_cloud_tokens"]))
+                candidates_gain = max(0, int(completion_run["candidates"]) - int(first["candidates"]))
+                cards = st.columns(4)
+                cards[0].metric(
+                    "Token 对比",
+                    "%s → %s" % (first["used_cloud_tokens"], savings_run["used_cloud_tokens"]),
+                    "减少 %s" % token_saved,
+                )
+                cards[1].metric(
+                    "已验证假设",
+                    "%s → %s" % (int(first["candidates"]), int(completion_run["candidates"])),
+                    "增加 %s 个" % candidates_gain,
+                )
+                cards[2].metric(
+                    "运行时间（秒）",
+                    "%s → %s" % (first["elapsed_seconds"], completion_run["elapsed_seconds"]),
+                )
+                cards[3].metric(
+                    "独立测试 AUC",
+                    "%s → %s" % (first["test_auc"], completion_run["test_auc"]),
+                )
+                if token_saved > 0 and candidates_gain > 0:
+                    st.success(
+                        "系统同时做到两点：Token 成本减少 %s，已验证假设从 %s 个提高到 %s 个，测试质量保持。"
+                        % (token_saved, int(first["candidates"]), int(completion_run["candidates"]))
+                    )
+                elif token_saved > 0:
+                    st.success("本轮主要体现 Token 节省，完成度保持。")
+                elif candidates_gain > 0:
+                    st.success(
+                        "本轮主要体现完成度提升：已验证假设从 %s 个提高到 %s 个。"
+                        % (int(first["candidates"]), int(completion_run["candidates"]))
+                    )
+            token_chart, calls_chart, time_chart, auc_chart = _comparison_charts(comparison)
+            chart_cols = st.columns(4)
+            for col, chart in zip(
+                chart_cols,
+                [token_chart, calls_chart, time_chart, auc_chart],
+            ):
+                with col:
+                    st.altair_chart(chart, use_container_width=True)
+            comparison_view = comparison[
+                [
+                    "label",
+                    "run_id",
+                    "phase",
+                    "used_cloud_tokens",
+                    "cloud_calls",
+                    "candidates",
+                    "elapsed_seconds",
+                    "tested",
+                    "stop_reason",
+                    "test_auc",
+                ]
+            ].copy()
+            comparison_view["phase"] = comparison_view["phase"].map(ui_mod.phase_label)
+            comparison_view["stop_reason"] = comparison_view["stop_reason"].map(ui_mod.reason_text)
+            comparison_view.columns = [
+                "轮次",
+                "运行 ID",
+                "阶段",
+                "使用 Token",
+                "云调用",
+                "候选数",
+                "运行时间（秒）",
+                "已完成测试",
+                "停止原因",
+                "独立测试 AUC",
+            ]
+            st.dataframe(comparison_view, use_container_width=True)
+
+            if len(runs) >= 2:
+                st.markdown("**假设结果对比（第一轮 vs 最新一轮）**")
+                round_1 = report_mod.summarize_run(runs[0]["events"])
+                round_latest = report_mod.summarize_run(runs[-1]["events"])
+                left_round, right_round = st.columns(2)
+                with left_round:
+                    st.markdown("**第一轮**")
+                    st.markdown(ui_mod.hypothesis_round_html(round_1), unsafe_allow_html=True)
+                with right_round:
+                    st.markdown("**最新一轮**")
+                    st.markdown(ui_mod.hypothesis_round_html(round_latest), unsafe_allow_html=True)
+                stats_1 = ui_mod.experiment_summary(round_1)
+                stats_latest = ui_mod.experiment_summary(round_latest)
+                if stats_latest["experiments"] > stats_1["experiments"]:
+                    st.success(
+                        "完成度提升：已验证假设从 %d 个提高到 %d 个。"
+                        % (stats_1["experiments"], stats_latest["experiments"])
+                    )
+                elif stats_latest["experiments"] == stats_1["experiments"]:
+                    st.info(
+                        "最新一轮完成度保持，节省主要来自决策缓存和本地规则。"
+                    )
+                else:
+                    st.warning("最新一轮已验证假设数量减少。")
 
     report_md = report_mod.render_markdown(summary)
     st.download_button(
@@ -1224,10 +1432,42 @@ def _render_review(
         st.warning(f"复现包生成失败：{exc}")
 
 
+def _run_replay(evaluation: Path, run_id: str) -> Tuple[bool, str]:
+    command = [
+        sys.executable,
+        "-m",
+        "autoresearch.replay",
+        "--run-id",
+        run_id,
+        "--output-dir",
+        str(evaluation),
+    ]
+    try:
+        proc = subprocess.run(
+            command,
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except Exception as exc:
+        return False, "复现执行失败：%s" % exc
+    if proc.returncode == 0:
+        return True, "离线复现完成，结果已写入 repro/summary.json"
+    return False, (proc.stderr or proc.stdout or "复现执行失败").strip()[-600:]
+
+
 def _render_evaluation(evaluation: Optional[Path], events_path: Path, run_id: str) -> None:
     if evaluation is None:
         st.info("请在侧栏选择一轮已保存评测。")
         return
+    if st.button("运行离线复现（replay）"):
+        ok, message = _run_replay(evaluation, run_id)
+        if ok:
+            st.success(message)
+            st.rerun()
+        else:
+            st.error(message)
     try:
         metrics = json.loads((evaluation / "metrics.json").read_text(encoding="utf-8"))
         rows = pd.DataFrame(metrics["arms"]).reindex(
@@ -1250,6 +1490,7 @@ def _render_evaluation(evaluation: Optional[Path], events_path: Path, run_id: st
             "用量来源",
             "耗时（秒）",
         ]
+        rows["用量来源"] = rows["用量来源"].map(ui_mod.usage_source_text)
         data_name = Path(str(metrics.get("data_path") or "")).name
         st.caption("内置合成面板" if data_name == DEMO_CSV.name else "数据：" + data_name)
         st.dataframe(rows, hide_index=True)
@@ -1258,9 +1499,17 @@ def _render_evaluation(evaluation: Optional[Path], events_path: Path, run_id: st
             replay = json.loads(replay_path.read_text(encoding="utf-8"))
             if replay.get("run_id") == run_id:
                 st.markdown("**离线复现对账**")
-                st.write("一致" if replay.get("status") == "match" else "存在差异")
+                st.write(ui_mod.status_text(replay.get("status")))
                 st.caption("复现云调用：%s 次" % replay.get("cloud_calls_replayed", "—"))
-                st.dataframe(pd.DataFrame(replay.get("checks", [])), hide_index=True)
+                checks = pd.DataFrame(replay.get("checks", []))
+                if not checks.empty:
+                    checks["name"] = checks["name"].map(ui_mod.replay_check_text)
+                    checks["passed"] = checks["passed"].map(
+                        lambda value: "通过" if value else "未通过"
+                    )
+                    checks["detail"] = checks["detail"].map(ui_mod.replay_detail_text)
+                    checks.columns = ["检查项", "是否通过", "对账详情"]
+                    st.dataframe(checks, hide_index=True)
                 return
         st.info("当前运行暂无复现记录。")
     except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -1272,6 +1521,10 @@ def main() -> None:
     _inject_styles()
     _render_header()
     _render_innovation()
+
+    if st.sidebar.button("重置页面"):
+        st.session_state.clear()
+        st.rerun()
 
     sources = _source_options()
     source = st.sidebar.radio("数据源", list(sources))
@@ -1313,7 +1566,12 @@ def main() -> None:
             except (OSError, ValueError, AttributeError) as exc:
                 st.warning("读取运行摘要失败：%s" % exc)
         st.sidebar.metric("阶段", ui_mod.phase_label(summary.get("phase")))
-        st.sidebar.metric("停止原因", str(summary.get("stop_reason") or "—"))
+        st.sidebar.markdown("**停止原因**")
+        st.sidebar.markdown(
+            '<span class="ar-stop-reason">%s</span>'
+            % html.escape(ui_mod.reason_text(summary.get("stop_reason"))),
+            unsafe_allow_html=True,
+        )
     else:
         summary = {}
         if load_error:

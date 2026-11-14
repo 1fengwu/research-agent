@@ -274,6 +274,9 @@ def run_token_comparison(runs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "label": "进化前（第 1 轮）" if order == 1 else "进化后（第 %d 轮）" % order,
                 "run_id": str(summary.get("run_id") or run.get("run_id") or order),
                 "phase": str(summary.get("phase") or ""),
+                "test_auc": float(
+                    ((summary.get("test_verdict") or {}).get("metric") or {}).get("auc") or 0.0
+                ),
                 "used_cloud_tokens": int(last_remaining.get("used_cloud_tokens") or tokens_total),
                 "cloud_calls": int(last_remaining.get("used_cloud_calls") or cloud_calls),
                 "candidates": int(last_remaining.get("used_candidates") or 0),

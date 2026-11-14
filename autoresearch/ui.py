@@ -183,6 +183,81 @@ def reason_text(reason: Any) -> str:
     return text
 
 
+BUDGET_MODE_LABELS = {
+    "normal": "常规预算",
+    "economy": "省流预算",
+    "critical": "关键预算",
+    "overrun": "超限预算",
+    "hard": "硬预算",
+    "soft": "软预算",
+}
+
+USAGE_SOURCE_LABELS = {
+    "none": "未调用云",
+    "offline_simulated": "离线模拟",
+    "actual": "实际云调用",
+    "estimated": "估算用量",
+    "unknown": "用量未知",
+}
+
+
+def budget_mode_text(mode: Any) -> str:
+    key = str(mode or "").lower()
+    return BUDGET_MODE_LABELS.get(key, str(mode or "—"))
+
+
+def usage_source_text(source: Any) -> str:
+    key = str(source or "").lower()
+    return USAGE_SOURCE_LABELS.get(key, str(source or "—"))
+
+
+def status_text(status: Any) -> str:
+    key = str(status or "").lower()
+    if key == "match":
+        return "一致"
+    if key == "mismatch":
+        return "存在差异"
+    return str(status or "—")
+
+
+REPLAY_CHECK_LABELS = {
+    "data_hash_match": "数据哈希一致",
+    "split_fingerprint_match": "切分指纹一致",
+    "test_auc_match": "独立测试 AUC 一致",
+    "valid_days_match": "有效天数一致",
+    "excluded_match": "排除样本数一致",
+    "artifacts_hash_match": "产物哈希一致",
+    "phase_match": "最终阶段一致",
+    "stop_reason_recorded": "停止原因已记录",
+    "ledger_usage_match": "账本用量一致",
+    "replay_offline_no_cloud": "复现过程未调用云模型",
+}
+
+
+def replay_check_text(name: Any) -> str:
+    key = str(name or "")
+    return REPLAY_CHECK_LABELS.get(key, key or "—")
+
+
+def replay_detail_text(detail: Any) -> str:
+    text = str(detail or "")
+    replacements = [
+        ("recorded=", "原始记录："),
+        (" replay=", "；复现结果："),
+        ("ledger=", "账本："),
+        ("stop_reason=", "停止原因："),
+        ("phase=", "阶段："),
+        ("used_candidates", "候选实验"),
+        ("used_cloud_calls", "云调用"),
+        ("used_cloud_tokens", "云 token"),
+        ("{", "（"),
+        ("}", "）"),
+    ]
+    for token, replacement in replacements:
+        text = text.replace(token, replacement)
+    return text
+
+
 def source_mode(source: str) -> Tuple[str, str]:
     """返回 (模式名, streamlit 风格)。"""
     text = str(source or "")
@@ -235,6 +310,77 @@ def metrics_arms(metrics: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
     if not isinstance(arms, list):
         return []
     return [row for row in arms if isinstance(row, dict)]
+
+
+HYPOTHESIS_LABELS = {
+    "volatility": "历史波动率",
+    "volume": "成交量变化",
+    "volatility_volume": "波动率 + 成交量",
+    "tree_shallow": "浅层树",
+    "constant": "常数填充",
+    "robust": "稳健缩放",
+}
+
+
+def hypothesis_label(hid: Any) -> str:
+    return HYPOTHESIS_LABELS.get(str(hid or ""), str(hid or "基础假设"))
+
+
+def hypothesis_conclusion(verdict: Any, skipped: bool = False) -> str:
+    if skipped:
+        return "本轮未执行，直接沿用已有结论"
+    key = str(verdict or "").lower()
+    if key == "supported":
+        return "假设成立，可以保留"
+    if key == "refuted":
+        return "假设被证据否定，不采用"
+    if key == "blocked":
+        return "实验被拦截，无法验证"
+    return "证据不足，继续观察"
+
+
+def hypothesis_round_html(summary: Dict[str, Any]) -> str:
+    items = summary.get("experiments") or []
+    cards: List[str] = []
+    if not items:
+        cards.append(
+            '<div class="ar-hyp-round-empty">'
+            "本轮没有新增候选假设，系统直接复用上一轮结论和本地规则。"
+            "</div>"
+        )
+    for item in items:
+        verdict = item.get("verdict") or {}
+        raw = str(verdict.get("verdict") or "")
+        skipped = bool(item.get("skipped"))
+        color = verdict_color(raw)
+        trial = item.get("trial") or {}
+        val1 = trial.get("val1") or {}
+        val2 = trial.get("val2") or {}
+        auc1 = float(val1.get("auc") or 0.0)
+        auc2 = float(val2.get("auc") or 0.0)
+        if skipped:
+            result_text = "本轮未执行"
+            auc_text = "— / —"
+        else:
+            result_text = verdict_label(raw)
+            auc_text = "%.4f / %.4f" % (auc1, auc2)
+        cards.append(
+            '<div class="ar-hyp-item" style="border-left-color:%s">'
+            '<div class="ar-hyp-title">假设：%s</div>'
+            '<div class="ar-verdict" style="color:%s">%s</div>'
+            '<div class="ar-hyp-auc">验证窗 AUC：%s</div>'
+            '<div class="ar-hyp-conclusion">结论：%s</div>'
+            "</div>"
+            % (
+                color,
+                html.escape(hypothesis_label(item.get("hypothesis_id"))),
+                color,
+                result_text,
+                auc_text,
+                html.escape(hypothesis_conclusion(raw, skipped)),
+            )
+        )
+    return '<div class="ar-hyp-grid">' + "".join(cards) + "</div>"
 
 
 def phase_color(phase: Any) -> str:
