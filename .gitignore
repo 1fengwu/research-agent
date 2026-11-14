@@ -11,4 +11,6 @@ dist/
 .parallel/
 *.log
 .DS_Store
+etc/
+share/
 

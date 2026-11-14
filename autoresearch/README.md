@@ -135,7 +135,7 @@ python -m autoresearch.cli demo
 python -m autoresearch.cli replay --events .arc/runner-events.jsonl
 
 # 真实后台启动（C 的 oracle 已由上游实现）
-python -m autoresearch.cli run --task .arc/task.json --oracle autoresearch.oracle:Oracle
+python -m autoresearch.cli run --task .arc/task.json --oracle autoresearch.oracle:ResearchOracle
 ```
 
 测试：

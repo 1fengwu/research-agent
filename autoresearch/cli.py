@@ -21,6 +21,7 @@ from .contracts import load_task_spec
 from .experiment import ResearchBackend
 from .evolution import ResearchIterationStore
 from .llm_router import HttpJsonCloudClient, NullCloudClient, ResearchRouter
+from .outputs import validate_event_list, validate_ledger, validate_summary
 from .research_pv import ResearchPVPlanner
 
 DEFAULT_MOCK_EVENTS = Path(__file__).resolve().parent / "mock_events.json"
@@ -81,6 +82,11 @@ def cmd_replay(args: argparse.Namespace) -> int:
         print(f"事件文件不存在: {events_path}", file=sys.stderr)
         return 2
     events = report_mod.load_events(events_path)
+    try:
+        validate_event_list(events)
+    except (TypeError, ValueError) as exc:
+        print(f"事件流不符合后端契约: {exc}", file=sys.stderr)
+        return 2
     runs = report_mod.group_runs(events)
     if not runs:
         print("事件文件为空", file=sys.stderr)
@@ -193,6 +199,14 @@ def cmd_run(args: argparse.Namespace) -> int:
             run_ledger_dir=str(ledger_dir),
         )
         summary = orchestrator.run()
+    try:
+        validate_summary(summary)
+        validate_ledger(summary["ledger"])
+        events = report_mod.load_events(events_path)
+        validate_event_list(events)
+    except (TypeError, ValueError) as exc:
+        print(f"运行产物不符合后端契约: {exc}", file=sys.stderr)
+        return 2
     print(json.dumps(summary, ensure_ascii=False, indent=2, default=str))
     if args.out:
         out_dir = Path(args.out)
