@@ -116,6 +116,8 @@ python -m autoresearch.replay --run-id <run_id> --output-dir .arc
 
 默认离线可复现；`evaluate.py` 加 `--cloud` 且配置 `ARC_LLM_BASE_URL/ARC_LLM_API_KEY/ARC_LLM_MODEL` 时才使用真实云。
 
+要比较同等实验预算下的候选选择策略，加 `--fixed-candidates --candidates 4`。三臂共享预注册候选池，每臂最多运行四个候选，达到上限后仍会锁定并做独立测试。云模型可从待运行候选中选择下一项，实际选择记录在 `research.revised` 的 `candidate_selected` 事件中。默认评测仍使用软预算。
+
 ```bash
 python -m unittest autoresearch.tests.test_c_tasks -v
 ```

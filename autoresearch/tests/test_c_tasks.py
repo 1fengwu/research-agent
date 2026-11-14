@@ -22,7 +22,7 @@ from autoresearch.contracts import (
     normalize_trial_result,
     validate_run_event,
 )
-from autoresearch.evaluate import run_evaluate
+from autoresearch.evaluate import OfflineCloudClient, run_arm, run_evaluate
 from autoresearch.experiment import ResearchBackend
 from autoresearch.llm_router import NullCloudClient, ResearchRouter
 from autoresearch.oracle import ResearchOracle
@@ -223,6 +223,25 @@ class OracleAdversarialTest(unittest.TestCase):
 
 
 class EvaluateTest(unittest.TestCase):
+    def test_fixed_candidates_executes_cloud_selection_and_preserves_test(self) -> None:
+        client = OfflineCloudClient(reply={
+            "decision": "test momentum first",
+            "evidence_ids": ["E00"],
+            "actions": [{"action": "select_candidate", "target": "exp-007"}],
+        })
+        with tempfile.TemporaryDirectory(dir=REPO_ROOT) as folder:
+            task = make_task()
+            record = run_arm(task, Path(folder), "B", cloud_client=client, fixed_candidates=True)
+            events = [
+                json.loads(line)
+                for line in (Path(record["run_dir"]) / "events.jsonl").read_text(encoding="utf-8").splitlines()
+            ]
+            started = [event["experiment_id"] for event in events if event["type"] == "research.experiment_started"]
+            self.assertEqual(started, ["exp-007", "exp-001"])
+            self.assertTrue(any(event["decision_reason"] == "candidate_selected" for event in events))
+            self.assertTrue(any(event["type"] == "research.escalation" for event in events))
+            self.assertTrue(record["summary"]["tested"])
+
     def test_evaluate_runs_three_arms_and_writes_metrics(self) -> None:
         with tempfile.TemporaryDirectory(dir=REPO_ROOT) as folder:
             metrics = run_evaluate(make_task(), Path(folder), price=0.02)

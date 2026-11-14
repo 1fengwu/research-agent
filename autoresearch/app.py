@@ -32,19 +32,18 @@ DEMO_EVENTS = DEMO_DIR / "runner-events.jsonl"
 UPLOAD_DIR = REPO_ROOT / ".arc" / "uploads"
 
 
-def _source_options() -> List[str]:
-    options = ["离线演示（mock_events.json）"]
+def _source_options() -> Dict[str, Path]:
+    options = {}
+    for metrics in sorted((REPO_ROOT / ".arc").glob("*/metrics.json"), reverse=True):
+        for events in sorted(metrics.parent.glob("*/*/events.jsonl"), reverse=True):
+            relative = events.relative_to(metrics.parent)
+            options[f"已保存评测 · {metrics.parent.name} · {relative.parts[0]} · {events.parent.name}"] = events
+    options["离线演示（mock_events.json）"] = MOCK_EVENTS
     if ARC_EVENTS.exists():
-        options.append(".arc/runner-events.jsonl")
+        options[".arc/runner-events.jsonl"] = ARC_EVENTS
     if DEMO_EVENTS.exists():
-        options.append(".arc/demo/runner-events.jsonl")
+        options[".arc/demo/runner-events.jsonl"] = DEMO_EVENTS
     return options
-
-
-def _events_path(source: str) -> Path:
-    if source.endswith("runner-events.jsonl"):
-        return REPO_ROOT / ".arc" / (source.split(".arc/")[-1])
-    return MOCK_EVENTS
 
 
 def _safe_load_events(path: Path) -> Tuple[List[Dict[str, Any]], str]:
@@ -273,6 +272,32 @@ def _render_create_task() -> None:
 
 def _render_track(summary: Dict[str, Any]) -> None:
     st.subheader("跟踪研究")
+    events = summary.get("events") or []
+    escalations = [event for event in events if event.get("type") == "research.escalation"]
+    for index, event in enumerate(escalations, start=1):
+        extra = event.get("extra") or {}
+        actions = extra.get("actions") or []
+        selected = next(
+            (action.get("target") for action in actions if action.get("action") == "select_candidate"),
+            None,
+        )
+        with st.expander(f"云决策 {index}" + (f" · 建议 {selected}" if selected else "")):
+            st.write(event.get("decision_reason", ""))
+            st.write("触发依据", ", ".join(extra.get("trigger") or []))
+            st.write("证据", ", ".join(extra.get("evidence_ids") or []))
+            charged = (event.get("tokens") or {}).get("charged")
+            if charged is not None:
+                st.write(f"本次调用计入账本 {charged} Token")
+            if selected:
+                experiment = next(
+                    (item for item in summary.get("experiments", []) if item.get("experiment_id") == selected),
+                    None,
+                )
+                if experiment:
+                    verdict = experiment.get("verdict") or {}
+                    st.write("对应实验已执行" if experiment.get("started") else "对应实验尚未执行")
+                    if verdict.get("verdict"):
+                        st.write("验证裁决", verdict["verdict"])
     budget = summary.get("budget") or {}
     left, right = st.columns([2, 1])
     with left:
@@ -312,7 +337,7 @@ def _render_track(summary: Dict[str, Any]) -> None:
     st.markdown(_experiments_markdown(summary))
 
 
-def _render_review(summary: Dict[str, Any]) -> None:
+def _render_review(summary: Dict[str, Any], evaluation: Optional[Path]) -> None:
     st.subheader("审查结论")
     baseline = summary.get("baseline") or {}
     locked = summary.get("locked") or {}
@@ -347,6 +372,11 @@ def _render_review(summary: Dict[str, Any]) -> None:
         file_name=f"report-{summary.get('run_id', 'run')}.md",
         mime="text/markdown",
     )
+    if evaluation is not None:
+        archive = evaluation / "evaluation-evidence.zip"
+        if archive.is_file():
+            st.download_button("下载本轮评测证据包", archive.read_bytes(), file_name=archive.name)
+        return
     try:
         command = report_mod.default_run_command(
             st.session_state.get("events_path", str(MOCK_EVENTS))
@@ -368,14 +398,43 @@ def _render_review(summary: Dict[str, Any]) -> None:
         st.warning(f"复现包生成失败：{exc}")
 
 
+def _render_evaluation(evaluation: Optional[Path], events_path: Path, run_id: str) -> None:
+    if evaluation is None:
+        st.info("请在侧栏选择一轮已保存评测。")
+        return
+    try:
+        metrics = json.loads((evaluation / "metrics.json").read_text(encoding="utf-8"))
+        rows = pd.DataFrame(metrics["arms"]).reindex(columns=[
+            "arm", "test_auc", "candidates", "cloud_calls", "charged_tokens",
+            "usage_source", "wall_seconds",
+        ])
+        rows.columns = ["策略", "独立测试 AUC", "候选数", "云调用", "Token", "用量来源", "耗时（秒）"]
+        st.caption("内置合成面板" if Path(metrics.get("data_path", "")).name == DEMO_CSV.name else "数据：" + Path(metrics.get("data_path", "")).name)
+        st.dataframe(rows, hide_index=True)
+        replay_path = events_path.parent.parent / "repro" / "summary.json"
+        if replay_path.is_file():
+            replay = json.loads(replay_path.read_text(encoding="utf-8"))
+            if replay.get("run_id") == run_id:
+                st.markdown("**离线复现对账**")
+                st.write("一致" if replay.get("status") == "match" else "存在差异")
+                st.caption(f"复现云调用：{replay.get('cloud_calls_replayed', '—')} 次")
+                st.dataframe(pd.DataFrame(replay.get("checks", [])), hide_index=True)
+                return
+        st.info("当前运行暂无复现记录。")
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        st.error(f"读取评测产物失败：{exc}")
+
+
 def main() -> None:
     st.set_page_config(page_title="Helix 赫力 评审工作台", layout="wide")
     st.title("Helix 赫力 · 量价信号验证工作台")
     st.caption("D 薄壳界面：只读 A 事件、C 指标与 B 数据摘要，不做研究决策。")
 
-    source = st.sidebar.radio("数据源", _source_options())
+    sources = _source_options()
+    source = st.sidebar.radio("数据源", list(sources))
     st.session_state["source"] = source
-    events_path = _events_path(source)
+    events_path = sources[source]
+    evaluation = events_path.parents[2] if source.startswith("已保存评测") else None
     st.session_state["events_path"] = str(events_path)
     events, load_error = _safe_load_events(events_path)
     runs = report_mod.group_runs(events)
@@ -385,6 +444,15 @@ def main() -> None:
         summary = report_mod.summarize_run(
             next(run["events"] for run in runs if run["run_id"] == selected)
         )
+        if evaluation is not None:
+            try:
+                saved = json.loads((events_path.parent / "summary.json").read_text(encoding="utf-8"))
+                if saved.get("run_id") == selected:
+                    for field in ("baseline", "locked", "test_verdict", "tested"):
+                        if field in saved:
+                            summary[field] = saved[field]
+            except (OSError, ValueError, AttributeError) as exc:
+                st.warning(f"读取运行摘要失败：{exc}")
         st.sidebar.metric("阶段", summary.get("phase") or "—")
         st.sidebar.metric("停止原因", str(summary.get("stop_reason") or "—"))
     else:
@@ -392,9 +460,12 @@ def main() -> None:
         if load_error:
             st.sidebar.error(load_error)
 
-    tab_create, tab_track, tab_review = st.tabs(["创建任务", "跟踪研究", "审查结论"])
+    tab_create, tab_track, tab_review, tab_eval = st.tabs(["创建任务", "跟踪研究", "审查结论", "评测与复现"])
     with tab_create:
-        _render_create_task()
+        if evaluation is None:
+            _render_create_task()
+        else:
+            st.info("如需创建任务，请在侧栏切换到实时运行或离线演示。")
     with tab_track:
         if summary:
             _render_track(summary)
@@ -405,9 +476,11 @@ def main() -> None:
             st.rerun()
     with tab_review:
         if summary:
-            _render_review(summary)
+            _render_review(summary, evaluation)
         else:
             st.info("完成研究后，这里会显示基线/锁定候选/独立测试对照与下载。")
+    with tab_eval:
+        _render_evaluation(evaluation, events_path, str(summary.get("run_id", "")))
 
 
 if __name__ == "__main__":

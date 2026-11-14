@@ -93,6 +93,7 @@ class ResearchOrchestrator:
         run_id: Optional[str] = None,
         clock: Optional[Callable[[], float]] = None,
         run_ledger_dir: Optional[str] = None,
+        candidate_limit: Optional[int] = None,
     ) -> None:
         self.task = task
         self.data = data
@@ -103,6 +104,7 @@ class ResearchOrchestrator:
         self.writer = writer or EventWriter()
         self.run_id = run_id or f"R{int(time.time() * 1000)}"
         self.run_ledger_dir = run_ledger_dir
+        self.candidate_limit = candidate_limit
         self._clock = clock or time.monotonic
         self._started_wall = self._clock()
         self.router.event_cb = self._router_event
@@ -276,6 +278,8 @@ class ResearchOrchestrator:
 
     def _adaptive_plan_cap(self, specs: List[ExperimentSpec]) -> List[ExperimentSpec]:
         """Plan smaller as budget pressure rises so later plans cost fewer tokens."""
+        if self.candidate_limit is not None:
+            return specs
         cap = {"economy": 2, "critical": 1, "overrun": 1}.get(
             self.ledger.budget_mode()
         )
@@ -511,6 +515,9 @@ class ResearchOrchestrator:
         pending = list(planned)
         stop: Optional[str] = None
         while pending and self.ledger.can_run_experiment() and stop is None:
+            if self.candidate_limit is not None and len(state["attempted"]) >= self.candidate_limit:
+                stop = "candidate_limit"
+                break
             spec = pending.pop(0)
             fingerprint = spec.fingerprint or experiment_fingerprint(
                 spec,
@@ -528,7 +535,14 @@ class ResearchOrchestrator:
                 continue
 
             state["budget_snapshot"] = self.ledger.snapshot()
-            outcome = self.router.escalate_if_needed(state)
+            options = [spec, *pending]
+            outcome = self.router.escalate_if_needed({
+                **state,
+                "pending_candidates": [
+                    {"id": item.experiment_id, "feature_set": item.feature_set, "model": item.model}
+                    for item in options
+                ],
+            })
             if outcome.get("escalated"):
                 state = self._apply_escalation_outcome(state, outcome)
                 if outcome.get("valid"):
@@ -540,20 +554,39 @@ class ResearchOrchestrator:
                         experiment_id=spec.experiment_id,
                         extra={"reply": _short(outcome["reply"])},
                     )
-                    try:
-                        more = self._adaptive_plan_cap(
-                            self._normalize_specs(
-                                self.planner.plan(self.task, self._view(state), "revised")
+                    actions = outcome["reply"].get("actions") or [{}]
+                    action = actions[0]
+                    target = action.get("target")
+                    if action.get("action") == "select_candidate":
+                        selected = next((item for item in options if item.experiment_id == target), None)
+                        if selected is not None:
+                            pending = [item for item in options if item is not selected]
+                            fingerprint = selected.fingerprint or experiment_fingerprint(
+                                selected, self.task.data_hash, self.task.seed, as_jsonable(self.task.split)
                             )
-                        )
-                        pending = more + pending
-                    except Exception as exc:
-                        self._emit(
-                            "research.escalation_failed",
-                            PHASE_REVISED,
-                            f"replan_failed:{exc}",
-                            experiment_id=spec.experiment_id,
-                        )
+                            self._emit(
+                                "research.revised", PHASE_REVISED, "candidate_selected",
+                                experiment_id=selected.experiment_id,
+                                extra={"previous_next": spec.experiment_id, "source": outcome.get("source", "cloud")},
+                            )
+                            spec = selected
+                        else:
+                            self._emit(
+                                "research.revised", PHASE_REVISED, "candidate_selection_rejected",
+                                experiment_id=spec.experiment_id,
+                            )
+                    elif action.get("action") == "replan" and self.candidate_limit is None:
+                        try:
+                            pending = self._adaptive_plan_cap(
+                                self._normalize_specs(
+                                    self.planner.plan(self.task, self._view(state), "revised")
+                                )
+                            ) + pending
+                        except Exception as exc:
+                            self._emit("research.escalation_failed", PHASE_REVISED, f"replan_failed:{exc}")
+
+            if fingerprint in state["attempted"]:
+                continue
 
             self.ledger.record_experiment(note=spec.experiment_id)
             self._emit(
@@ -634,8 +667,7 @@ class ResearchOrchestrator:
             else:
                 state["stall_rounds"] = int(state.get("stall_rounds", 0)) + 1
 
-            if self._window_conflict(trial, baseline):
-                state["window_conflict"] = True
+            state["window_conflict"] = self._window_conflict(trial, baseline)
             signature = str(trial.error or verdict.verdict or "unknown")
             count = int(state["error_signatures"].get(signature, 0)) + 1
             state["error_signatures"][signature] = count

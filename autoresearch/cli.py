@@ -211,7 +211,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     except (TypeError, ValueError) as exc:
         print(f"运行产物不符合后端契约: {exc}", file=sys.stderr)
         return 2
-    print(json.dumps(summary, ensure_ascii=False, indent=2, default=str))
+    print(json.dumps(summary, ensure_ascii=True, indent=2, default=str))
     if args.out:
         out_dir = Path(args.out)
         report_path, package_path = _out_files(
