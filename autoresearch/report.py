@@ -6,8 +6,11 @@ D 只消费 A 的事件流、B 的数据摘要和 C 的指标/verdict 文件；
 
 from __future__ import annotations
 
+import hashlib
 import json
+import subprocess
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -450,6 +453,103 @@ def _jsonl_bytes(events: List[Dict[str, Any]]) -> bytes:
     ).encode("utf-8")
 
 
+DELIVERY_MANIFEST_VERSION = "delivery-manifest-v1"
+
+
+def repository_revision(root: str | Path = ".") -> str:
+    """返回当前 git 短提交；非仓库环境返回空串，不抛错。"""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+    except Exception:
+        return ""
+    if proc.returncode != 0:
+        return ""
+    return str(proc.stdout or "").strip()[:12]
+
+
+def build_delivery_manifest(
+    summary: Dict[str, Any],
+    *,
+    git_commit: str = "",
+) -> Dict[str, Any]:
+    """封存清单：输入指纹、输出事实、验收打勾，随复现包一起冻结。"""
+    task = summary.get("task") or {}
+    profile = summary.get("data_profile") or {}
+    baseline = summary.get("baseline") or {}
+    budget = summary.get("budget") or {}
+    test_verdict = summary.get("test_verdict") or {}
+    metric = test_verdict.get("metric") or {}
+    savings = summary.get("token_savings") or {}
+    data_hash = str(
+        task.get("data_hash")
+        or profile.get("data_hash")
+        or baseline.get("data_hash")
+        or ""
+    )
+    split_fingerprint = str(
+        summary.get("split_fingerprint")
+        or profile.get("split_fingerprint")
+        or baseline.get("split_fingerprint")
+        or ""
+    )
+    tested = bool(summary.get("tested"))
+    checklist = {
+        "task_and_contract_frozen": bool(task.get("task_id")),
+        "data_and_split_frozen": bool(data_hash) and bool(split_fingerprint),
+        "closed_loop_completed": tested and bool(summary.get("phase")),
+        "independent_test_scored": tested and int(metric.get("valid_days") or 0) > 0,
+        "budget_trace_recorded": bool(budget),
+        "self_iteration_evidence": (
+            int(summary.get("cache_hit_count") or 0) > 0
+            or int(summary.get("local_rule_count") or 0) > 0
+            or float(savings.get("total_estimated_saved") or 0.0) > 0.0
+        ),
+    }
+    return {
+        "schema_version": DELIVERY_MANIFEST_VERSION,
+        "frozen_at": datetime.now(timezone.utc).isoformat(),
+        "git_commit": git_commit,
+        "run_id": str(summary.get("run_id") or ""),
+        "inputs": {
+            "task_id": task.get("task_id"),
+            "data_path": task.get("data_path"),
+            "data_hash": data_hash,
+            "split_fingerprint": split_fingerprint,
+            "seed": task.get("seed"),
+            "label_horizon": task.get("label_horizon"),
+            "primary_metric": task.get("primary_metric"),
+            "budget": task.get("budget") or {},
+        },
+        "outcomes": {
+            "phase": summary.get("phase"),
+            "stop_reason": summary.get("stop_reason"),
+            "tested": tested,
+            "test_verdict": test_verdict.get("verdict"),
+            "test_auc": metric.get("auc"),
+            "locked_candidate": (summary.get("locked") or {}).get("name"),
+            "elapsed_seconds": summary.get("elapsed_seconds"),
+        },
+        "budget_at_freeze": {
+            "used_candidates": budget.get("used_candidates"),
+            "used_cloud_calls": budget.get("used_cloud_calls"),
+            "used_cloud_tokens": budget.get("used_cloud_tokens"),
+            "remaining_seconds": budget.get("remaining_seconds"),
+        },
+        "savings": {
+            "cache_hits": summary.get("cache_hit_count"),
+            "local_rule_decisions": summary.get("local_rule_count"),
+            "total_estimated_saved": savings.get("total_estimated_saved"),
+        },
+        "checklist": checklist,
+        "rule": "评审现场以本快照为准，冻结后不再改动产物。",
+    }
+
+
 def build_reproduce_package(
     summary: Dict[str, Any],
     run_dir: str | Path,
@@ -457,6 +557,7 @@ def build_reproduce_package(
     *,
     command: str,
     report_md: str,
+    delivery_manifest: Optional[Dict[str, Any]] = None,
 ) -> Path:
     """打包复现目录：事件、报告、任务、账本、数据哈希/切分、指标与命令。"""
     run_dir = Path(run_dir)
@@ -469,6 +570,11 @@ def build_reproduce_package(
         archive.writestr(f"{prefix}/runner-events.jsonl", _jsonl_bytes(summary.get("events") or []))
         archive.writestr(f"{prefix}/report.md", report_md)
         archive.writestr(f"{prefix}/run-command.txt", command)
+        if delivery_manifest is not None:
+            archive.writestr(
+                f"{prefix}/delivery-manifest.json",
+                (json.dumps(delivery_manifest, ensure_ascii=False, indent=2, default=str) + "\n").encode("utf-8"),
+            )
 
         _copy_into_zip(archive, f"{prefix}/requirements.txt", run_dir / "requirements.txt")
         _copy_into_zip(archive, f"{prefix}/requirements-app.txt", run_dir / "requirements-app.txt")
@@ -487,6 +593,40 @@ def build_reproduce_package(
         for name in ("metrics.json", "metrics.csv"):
             _copy_into_zip(archive, f"{prefix}/metrics/{name}", run_dir / name)
     return zip_path
+
+
+def freeze_delivery_snapshot(
+    summary: Dict[str, Any],
+    package_path: str | Path,
+    out_dir: str | Path,
+    *,
+    delivery_manifest: Optional[Dict[str, Any]] = None,
+    git_commit: str = "",
+) -> Path:
+    """写出评审前封存快照：与 zip 内 manifest 同源，外加归档 sha256 与大小。"""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    manifest = dict(
+        delivery_manifest
+        or build_delivery_manifest(summary, git_commit=git_commit)
+    )
+    if isinstance(manifest.get("checklist"), dict):
+        manifest["checklist"] = dict(manifest["checklist"])
+    package_path = Path(package_path)
+    archive_bytes = package_path.read_bytes() if package_path.exists() else b""
+    manifest["archive"] = {
+        "file": package_path.name,
+        "sha256": hashlib.sha256(archive_bytes).hexdigest(),
+        "size_bytes": len(archive_bytes),
+    }
+    manifest["checklist"]["reproduce_package_complete"] = bool(archive_bytes)
+    run_id = str(summary.get("run_id") or "run")
+    snapshot_path = out_dir / f"snapshot-{run_id}.json"
+    snapshot_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2, default=str) + "\n",
+        encoding="utf-8",
+    )
+    return snapshot_path
 
 
 def default_run_command(events_path: str | Path, *, out_dir: str | Path | None = None) -> str:

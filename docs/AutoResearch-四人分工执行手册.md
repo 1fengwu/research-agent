@@ -307,6 +307,7 @@ D 是“脸”：把 A 的事件、C 的指标变成一页能操作的 Streamlit
 - `autoresearch/app.py`
 - `autoresearch/report.py`
 - `autoresearch/mock_events.json`（离线联调）
+- 交付封存：zip 内 `delivery-manifest.json` + 外部 `snapshot-<run_id>.json`
 - 页面截图/演示脚本
 
 ### 6.3 具体要做的事
@@ -322,7 +323,8 @@ D 是“脸”：把 A 的事件、C 的指标变成一页能操作的 Streamlit
 3. `report.py`：
    - 从 plan/hypotheses/experiments/verdicts/metrics 生成 Markdown 报告；
    - 打包复现目录：数据哈希、split、seed、事件、ledger、指标、依赖 lock、运行命令；
-   - 提供“下载复现包”按钮。
+   - 生成交付封存：zip 内嵌 `delivery-manifest.json`，同时输出带 zip sha256 的 `snapshot-<run_id>.json`；
+   - 提供“下载复现包 / 交付封存快照”按钮。
 4. 离线联调：
    - 前几小时用 `mock_events.json` 模拟研究时间线和结果；
    - UI 不依赖真实 LLM 也能展示全部页面状态。
@@ -354,6 +356,7 @@ D 是“脸”：把 A 的事件、C 的指标变成一页能操作的 Streamlit
 - mock 事件下时间线顺序正确；
 - 预算不足时页面显示剩余预算、`budget_mode` 与 `budget_blocked`，且运行仍 TESTED；
 - 跟踪页/报告显示 `token_savings`：上下文压缩、缓存命中、本地规则、避免云调用与总节省；
+- 复现包内嵌 `delivery-manifest.json`，目录内有 `snapshot-<run_id>.json`，两者 checklist 一致；
 - 报告下载包含复现目录；
 - 页面刷新后状态能从事件文件恢复；
 - 不引入任何会写研究数据的功能。
@@ -413,6 +416,7 @@ D 是“脸”：把 A 的事件、C 的指标变成一页能操作的 Streamlit
 | `research.token_savings` 事件与 summary 字段 | A（D 在报告展示） | ☐ |
 | `report/final.md` | D（数据来自 A/C） | ☐ |
 | 复现包 zip + `replay` 输出 | D（内容来自 C） | ☐ |
+| 交付封存：zip 内 `delivery-manifest.json` + `snapshot-*.json` | D | ☐ |
 | requirements lock + 离线 wheel | B/C 协同 | ☐ |
 | 干净环境启动记录 | 全员按 D 脚本验收 | ☐ |
 | P0 验收清单逐项打勾 | 四人 | ☐ |

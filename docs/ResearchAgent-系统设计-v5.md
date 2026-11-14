@@ -451,7 +451,9 @@ autoresearch/
 - 数据来源与哈希、切分、种子；
 - 依赖版本 lock；
 - 运行事件流；
-- 一条复现命令。
+- 一条复现命令；
+- 内嵌 `delivery-manifest.json` 与外部 `snapshot-<run_id>.json`（含 zip
+  sha256、输入指纹、P0 打勾），评审现场以快照为准，不再改产物。
 
 ```bash
 python -m autoresearch.cli run --task task.json
@@ -719,7 +721,7 @@ P0 页面不要做：
 13. **前端彩排**：把“创建任务 → 跟踪研究 → 审查结论 → 下载复现包”和“低预算触发 `budget_blocked`”各跑一遍，截图留档。
 14. **离线依赖验证**：requirements lock + 离线 wheel 目录，从干净环境执行一次启动命令；Streamlit 坏掉时 CLI 全流程可顶替。
 15. **自迭代证据**：证据 A（同题二次运行更省）必须在冻结前输出实测数字；时间允许再跑证据 B（第二数据/任务迁移）。
-16. **封存演示快照**：数据哈希、切分、种子、参数、运行日志、复现包版本和 P0 验收清单逐项打勾结果全部放进交付包，评审现场不再改。
+16. **封存演示快照**：数据哈希、切分、种子、参数、运行日志、复现包版本和 P0 验收清单逐项打勾结果全部放进交付包，评审现场不再改。已实现：`build_reproduce_package` 内嵌 `delivery-manifest.json`，`freeze_delivery_snapshot` 另写 `snapshot-<run_id>.json`（含复现包 sha256）。
 
 ---
 

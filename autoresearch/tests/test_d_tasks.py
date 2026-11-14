@@ -193,6 +193,50 @@ class TestDReport(unittest.TestCase):
         self.assertIn(f"{prefix}/requirements.txt", names)
         self.assertIn(f"{prefix}/data/demo_panel.csv.sha256", names)
 
+    def test_delivery_manifest_and_frozen_snapshot(self) -> None:
+        summary = self._summary()
+        markdown = report.render_markdown(summary)
+        with tempfile.TemporaryDirectory() as folder:
+            manifest = report.build_delivery_manifest(
+                summary,
+                git_commit="0123456789ab",
+            )
+            package = report.build_reproduce_package(
+                summary,
+                run_dir=REPO_ROOT,
+                out_dir=Path(folder),
+                command=report.default_run_command("autoresearch/mock_events.json"),
+                report_md=markdown,
+                delivery_manifest=manifest,
+            )
+            snapshot = report.freeze_delivery_snapshot(
+                summary,
+                package,
+                Path(folder),
+                delivery_manifest=manifest,
+            )
+            self.assertTrue(snapshot.exists())
+            frozen = json.loads(snapshot.read_text(encoding="utf-8"))
+            self.assertEqual(frozen["schema_version"], "delivery-manifest-v1")
+            self.assertEqual(frozen["git_commit"], "0123456789ab")
+            self.assertEqual(frozen["run_id"], "R20261114-001")
+            self.assertIn("checklist", frozen)
+            self.assertIn("archive", frozen)
+            self.assertEqual(frozen["archive"]["file"], package.name)
+            self.assertTrue(frozen["archive"]["sha256"])
+            with zipfile.ZipFile(package) as archive:
+                names = set(archive.namelist())
+                prefix = "reproduce-R20261114-001"
+                self.assertIn(f"{prefix}/delivery-manifest.json", names)
+                inner = json.loads(
+                    archive.read(f"{prefix}/delivery-manifest.json").decode("utf-8")
+                )
+            self.assertEqual(inner["schema_version"], "delivery-manifest-v1")
+            self.assertEqual(
+                set(frozen["checklist"]),
+                set(inner["checklist"]).union({"reproduce_package_complete"}),
+            )
+
 
 class TestDCLIFallback(unittest.TestCase):
     def test_cli_demo_replay_works(self) -> None:

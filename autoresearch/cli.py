@@ -56,7 +56,7 @@ def _out_files(
     events_path: Path,
     out_dir: Path,
     summary: Dict[str, Any],
-) -> tuple[Path, Path]:
+) -> tuple[Path, Path, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     run_id = str(summary.get("run_id") or "run")
     report_md = report_mod.render_markdown(summary)
@@ -66,14 +66,23 @@ def _out_files(
         events_path,
         out_dir=out_dir,
     )
+    git_commit = report_mod.repository_revision(Path.cwd())
+    manifest = report_mod.build_delivery_manifest(summary, git_commit=git_commit)
     package_path = report_mod.build_reproduce_package(
         summary,
         run_dir=run_dir,
         out_dir=out_dir,
         command=command,
         report_md=report_md,
+        delivery_manifest=manifest,
     )
-    return report_path, package_path
+    snapshot_path = report_mod.freeze_delivery_snapshot(
+        summary,
+        package_path,
+        out_dir,
+        delivery_manifest=manifest,
+    )
+    return report_path, package_path, snapshot_path
 
 
 def cmd_replay(args: argparse.Namespace) -> int:
@@ -107,7 +116,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
         out_dir = Path(args.out)
         for run in runs:
             summary = report_mod.summarize_run(run["events"])
-            report_path, package_path = _out_files(
+            report_path, package_path, snapshot_path = _out_files(
                 Path.cwd(),
                 events_path,
                 out_dir,
@@ -115,6 +124,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
             )
             print("report=%s" % report_path)
             print("package=%s" % package_path)
+            print("snapshot=%s" % snapshot_path)
     return 0
 
 
@@ -215,7 +225,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     print(json.dumps(summary, ensure_ascii=True, indent=2, default=str))
     if args.out:
         out_dir = Path(args.out)
-        report_path, package_path = _out_files(
+        report_path, package_path, snapshot_path = _out_files(
             Path.cwd(),
             events_path,
             out_dir,
@@ -223,6 +233,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         )
         print("report=%s" % report_path)
         print("package=%s" % package_path)
+        print("snapshot=%s" % snapshot_path)
     return 0
 
 

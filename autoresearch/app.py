@@ -1192,18 +1192,33 @@ def _render_review(
         command = report_mod.default_run_command(
             st.session_state.get("events_path", str(MOCK_EVENTS))
         )
+        git_commit = report_mod.repository_revision(REPO_ROOT)
+        manifest = report_mod.build_delivery_manifest(summary, git_commit=git_commit)
         package = report_mod.build_reproduce_package(
             summary,
             run_dir=REPO_ROOT,
             out_dir=DEMO_DIR,
             command=command,
             report_md=report_md,
+            delivery_manifest=manifest,
+        )
+        snapshot = report_mod.freeze_delivery_snapshot(
+            summary,
+            package,
+            DEMO_DIR,
+            delivery_manifest=manifest,
         )
         st.download_button(
             "下载复现包 zip",
             data=package.read_bytes(),
             file_name=package.name,
             mime="application/zip",
+        )
+        st.download_button(
+            "下载交付封存快照",
+            data=snapshot.read_bytes(),
+            file_name=snapshot.name,
+            mime="application/json",
         )
     except Exception as exc:
         st.warning(f"复现包生成失败：{exc}")
