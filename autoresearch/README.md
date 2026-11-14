@@ -59,7 +59,7 @@ python -m autoresearch data/demo_panel.csv
 
 命令使用真实数据后端、规划器和裁判。它在标准输出返回 JSON 摘要，独立测试指标位于 `test_verdict.metric`，流程未完成时返回非零退出码。默认把事件和预算账本写入 `.arc`，可用 `--output-dir` 指定输出目录。
 
-如需启用云模型，先设置 `ARC_LLM_BASE_URL`（或 `OPENAI_BASE_URL`）、`ARC_LLM_API_KEY` 和 `ARC_LLM_MODEL`，再添加 `--cloud`。
+如需启用云模型，可在仓库根目录创建 `.env`（参考 `.env.example`）或设置环境变量 `ARC_LLM_BASE_URL`（或 `OPENAI_BASE_URL`）、`ARC_LLM_API_KEY`、`ARC_LLM_MODEL`，再添加 `--cloud`；运行时自动读取 `.env`，且不覆盖已存在的环境变量。
 
 每次 `run()` 会先把 ledger 重置为 `.arc/ledgers/<run_id>.json`，R2 不会继承 R1 的预算；事件流用 `run_id` 区分多轮运行。
 

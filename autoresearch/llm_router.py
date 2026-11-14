@@ -3,11 +3,41 @@ from __future__ import annotations
 import json
 import math
 import os
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, runtime_checkable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .budget_gate import BudgetBlocked, BudgetExceeded, BudgetGate
+
+
+def _tokenize_env_value(value: str) -> str:
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+        return value[1:-1]
+    return value
+
+
+def _load_env_file(env_file: str | Path) -> None:
+    """读仓库根目录 `.env`，KEY=VALUE，不覆盖已有环境变量。"""
+    path = Path(env_file)
+    if not path.exists():
+        return
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        if key:
+            os.environ.setdefault(key, _tokenize_env_value(value))
+
+
+def _load_dotenv() -> None:
+    _load_env_file(Path(__file__).resolve().parents[1] / ".env")
+
+
+_load_dotenv()
 
 
 @runtime_checkable

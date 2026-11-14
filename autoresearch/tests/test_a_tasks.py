@@ -18,7 +18,35 @@ from autoresearch.contracts import (
     Verdict,
     load_task_spec,
 )
-from autoresearch.llm_router import ResearchRouter
+from autoresearch.llm_router import ResearchRouter, _load_env_file
+
+
+class CloudEnvTestCase(unittest.TestCase):
+    def test_load_env_file_sets_and_does_not_override(self) -> None:
+        keys = ("ARC_LLM_BASE_URL", "ARC_LLM_API_KEY", "ARC_LLM_MODEL")
+        old = {key: os.environ.get(key) for key in keys}
+        try:
+            with tempfile.TemporaryDirectory() as folder:
+                env_path = Path(folder) / ".env"
+                env_path.write_text(
+                    "ARC_LLM_BASE_URL=https://api.example.com/v1\n"
+                    "ARC_LLM_API_KEY=\"sk-test\"\n"
+                    "ARC_LLM_MODEL=model-b\n",
+                    encoding="utf-8",
+                )
+                os.environ.pop("ARC_LLM_BASE_URL", None)
+                os.environ.pop("ARC_LLM_API_KEY", None)
+                os.environ["ARC_LLM_MODEL"] = "model-a"
+                _load_env_file(env_path)
+                self.assertEqual(os.environ["ARC_LLM_BASE_URL"], "https://api.example.com/v1")
+                self.assertEqual(os.environ["ARC_LLM_API_KEY"], "sk-test")
+                self.assertEqual(os.environ["ARC_LLM_MODEL"], "model-a")
+        finally:
+            for key in keys:
+                if old[key] is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = old[key]
 
 
 class FakeCloudClient:
