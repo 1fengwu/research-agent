@@ -47,6 +47,7 @@ def main() -> int:
                 ledger,
                 client=client,
                 cache_path=str(args.output_dir / "cache" / "decision-cache.json"),
+                seed=task.seed,
             ),
             ledger=ledger,
             writer=EventWriter(args.output_dir / "runner-events.jsonl"),

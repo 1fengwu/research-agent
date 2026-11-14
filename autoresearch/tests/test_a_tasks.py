@@ -19,6 +19,7 @@ from autoresearch.contracts import (
     load_task_spec,
 )
 from autoresearch.llm_router import (
+    cache_key_for_decision,
     ResearchRouter,
     _load_env_file,
     difficulty_score,
@@ -76,6 +77,10 @@ class FakeCloudClient:
         reply: Optional[Dict[str, Any]] = None,
         invalid: bool = False,
         error: bool = False,
+        provider: str = "fake-provider",
+        model: str = "fake-model",
+        seed: Optional[int] = 7,
+        temperature: Optional[float] = 0.2,
     ) -> None:
         self.reply = reply or {
             "decision": "switch to volatility feature group",
@@ -84,6 +89,10 @@ class FakeCloudClient:
         }
         self.invalid = invalid
         self.error = error
+        self.provider = provider
+        self.model = model
+        self.seed = seed
+        self.temperature = temperature
         self.calls = 0
 
     def call(
@@ -669,6 +678,93 @@ class AgentATest(unittest.TestCase):
             self.assertEqual(savings["cache_hits"], 1)
             self.assertGreater(savings["cache_saved_tokens"], 0)
             self.assertGreater(savings["total_estimated_saved"], 0)
+
+    def test_cache_key_ignores_runtime_seconds(self) -> None:
+        state = {"critical_decision": False, "data_anomaly": False}
+        summary_a = {
+            "phase": "REVISED",
+            "active_config": {"model": "logistic", "feature_set": "base"},
+            "evidence_ids": ["exp-001:window_conflict"],
+            "last_trial": {
+                "experiment_id": "exp-001",
+                "seconds": 0.423,
+                "val1": {"auc": 0.60, "valid_days": 46},
+                "val2": {"auc": 0.62, "valid_days": 46},
+            },
+            "conflicts": {"window_conflict": True},
+            "pending_candidates": [],
+        }
+        summary_b = dict(summary_a)
+        summary_b["last_trial"] = dict(summary_a["last_trial"])
+        summary_b["last_trial"]["seconds"] = 12.345
+        self.assertEqual(
+            cache_key_for_decision(state, summary_a),
+            cache_key_for_decision(state, summary_b),
+        )
+
+    def test_cloud_call_records_reproducibility_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            task = make_task(folder)
+            cache_path = os.path.join(folder, "decision-cache.json")
+            client = FakeCloudClient()
+            ledger = BudgetGate(task.budget, clock=lambda: 0.0)
+            router = ResearchRouter(
+                ledger,
+                client=client,
+                cache_path=cache_path,
+                seed=11,
+                temperature=0.4,
+            )
+            state = self._pressure_state(folder)
+            state["window_conflict"] = True
+            outcome = router.escalate_if_needed(state)
+            self.assertEqual(outcome["source"], "cloud")
+            self.assertTrue(outcome["valid"])
+            cloud_entries = [
+                entry
+                for entry in ledger.usage_ledger()["entries"]
+                if entry.get("kind") == "cloud_call"
+            ]
+            self.assertEqual(len(cloud_entries), 1)
+            meta = cloud_entries[0]["meta"]
+            self.assertIn("prompt_hash", meta)
+            self.assertIn("response_hash", meta)
+            self.assertEqual(meta["model"], "fake-model")
+            self.assertEqual(meta["provider"], "fake-provider")
+            self.assertEqual(meta["seed"], 11)
+            self.assertEqual(meta["temperature"], 0.4)
+            cache_data = json.loads(Path(cache_path).read_text(encoding="utf-8"))
+            self.assertGreater(len(cache_data["entries"]), 0)
+            cached = next(iter(cache_data["entries"].values()))
+            self.assertEqual(cached["meta"]["response_hash"], meta["response_hash"])
+
+    def test_invalid_cloud_reply_is_cached_and_retry_is_free(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            task = make_task(folder)
+            cache_path = os.path.join(folder, "decision-cache.json")
+            client = FakeCloudClient(invalid=True)
+            ledger = BudgetGate(task.budget, clock=lambda: 0.0)
+            router = ResearchRouter(ledger, client=client, cache_path=cache_path)
+            state = self._pressure_state(folder)
+            state["window_conflict"] = True
+            first = router.escalate_if_needed(state)
+            self.assertFalse(first["valid"])
+            self.assertEqual(client.calls, 1)
+            cloud_entries = [
+                entry
+                for entry in ledger.usage_ledger()["entries"]
+                if entry.get("kind") == "cloud_call"
+            ]
+            self.assertEqual(len(cloud_entries), 1)
+            self.assertIn("failure_signature", cloud_entries[-1])
+
+            ledger2 = BudgetGate(task.budget, clock=lambda: 0.0)
+            router2 = ResearchRouter(ledger2, client=client, cache_path=cache_path)
+            second = router2.escalate_if_needed(self._pressure_state(folder))
+            self.assertEqual(second["source"], "local")
+            self.assertTrue(second["valid"])
+            self.assertEqual(client.calls, 1)
+            self.assertEqual(router2.local_rule_decisions, 1)
 
     def test_local_rule_avoids_cloud_under_budget_pressure(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

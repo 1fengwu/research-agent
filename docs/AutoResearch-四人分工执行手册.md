@@ -90,6 +90,8 @@ load TaskSpec
    - `local_rule_decision(state)`：economy/critical/overrun 下 window_conflict → 下一假设、重复实验错误 → 回退基线，0 云调用并写 `research.local_rule`；
    - `DecisionCache`：`.arc/cache/decision-cache.json` 跨轮次复用有效回包，命中 0 token 并写 `research.escalation_cached`；
    - `savings_summary()`：汇总压缩节省/缓存/本地规则/避免调用/总节省。
+    - 云调用账本记录 `meta`（`prompt_version/prompt_hash/response_hash/model/provider/seed/temperature/max_tokens/timeout_s/finish_reason`）；无效回包补 `failure_signature` 并缓存，二次命中同一失败签名直接本地规则免单；
+    - 提供给 C 的 `metrics-v2` 增加 `baseline_auc / auc_gain_vs_baseline / per_10k_token_gain / negative_result_rate / escalation_hit_rate / budget_blocked_rate / speedup_vs_greedy / speedup_vs_local`；A 同时提供 `ResearchIterationStore.rollback` 供版本链回退。
 5. 实现预算门：调用前估算输入 token + 输出上限；预算压力决定 normal/economy/critical/overrun；soft 默认不拦死，economy 计划 2 个、critical/overrun 计划 1 个新候选；软目标不足只跳过本次云调用并写 `budget_blocked`，不终止研究，最终测试总会被执行；`hard_limits=True` 才恢复硬停。
 6. 实现事件写入：阶段、决策原因、实验编号、调用 token、剩余预算全部写 `.arc/runner-events.jsonl`。
 7. 保证重试/回退语义：同一错误签名两次才云诊断；云回包无效则回规则；`rollback` 只由版本链生成新版本。

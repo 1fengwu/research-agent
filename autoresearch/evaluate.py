@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -118,6 +119,30 @@ def _usage_counts(ledger: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _unwrap_event_value(value: Any) -> Any:
+    """Event extras may store a truncated preview; unwrap it for metrics."""
+    if isinstance(value, dict) and value.get("truncated") and isinstance(value.get("preview"), str):
+        try:
+            return json.loads(value["preview"])
+        except Exception:
+            return {}
+    return value
+
+
+def _extract_merged_auc(value: Any) -> Optional[float]:
+    """Read merged_auc from a full baseline object or a truncated preview."""
+    unwrapped = _unwrap_event_value(value)
+    if isinstance(unwrapped, dict) and unwrapped.get("merged_auc") is not None:
+        return float(unwrapped["merged_auc"])
+    if isinstance(value, dict):
+        preview = value.get("preview")
+        if isinstance(preview, str):
+            match = re.search(r'"merged_auc"\s*:\s*([0-9]+(?:\.[0-9]+)?)', preview)
+            if match:
+                return float(match.group(1))
+    return None
+
+
 def _metrics_row(arm: str, record: Dict[str, Any], price: Optional[float]) -> Dict[str, Any]:
     summary = record["summary"]
     test_verdict = summary.get("test_verdict") or {}
@@ -135,6 +160,33 @@ def _metrics_row(arm: str, record: Dict[str, Any], price: Optional[float]) -> Di
         else None
     )
     savings = summary.get("token_savings") or {}
+    baseline_auc = None
+    budget_blocked = 0
+    for event in record.get("events") or []:
+        event_type = event.get("type") or ""
+        extra = event.get("extra") or {}
+        if event_type == "research.baseline":
+            baseline_auc = _extract_merged_auc(extra.get("baseline") or {})
+        elif event_type == "research.escalation_blocked":
+            budget_blocked += 1
+    experiments = summary.get("experiments") or []
+    total_experiments = len(experiments)
+    negative_results = sum(
+        1
+        for item in experiments
+        if (item.get("trial") or {}).get("error")
+        or str((item.get("verdict") or {}).get("verdict") or "") in {"refuted", "blocked"}
+    )
+    attempts = int(summary.get("escalation_attempts") or 0)
+    valid_escalations = int(summary.get("escalation_valid") or 0)
+    auc = metric.get("auc")
+    auc_gain = None
+    per_10k_token_gain = None
+    if auc is not None and baseline_auc is not None:
+        auc_gain = float(auc) - baseline_auc
+        charged = float(usage["charged_tokens"])
+        if charged > 0:
+            per_10k_token_gain = round(auc_gain * 10000.0 / charged, 6)
     return {
         "run_id": summary.get("run_id"),
         "arm": arm,
@@ -155,6 +207,21 @@ def _metrics_row(arm: str, record: Dict[str, Any], price: Optional[float]) -> Di
         "local_rules": savings.get("local_rule_decisions", 0),
         "cloud_calls_avoided": savings.get("cloud_calls_avoided", 0),
         "wall_seconds": summary.get("elapsed_seconds"),
+        "baseline_auc": round(baseline_auc, 6) if baseline_auc is not None else None,
+        "auc_gain_vs_baseline": round(auc_gain, 6) if auc_gain is not None else None,
+        "per_10k_token_gain": per_10k_token_gain,
+        "negative_result_rate": (
+            round(negative_results / total_experiments, 6) if total_experiments else 0.0
+        ),
+        "escalation_attempts": attempts,
+        "escalation_hit_rate": (
+            round(valid_escalations / attempts, 6) if attempts else 0.0
+        ),
+        "budget_blocked_rate": (
+            round(budget_blocked / attempts, 6) if attempts else 0.0
+        ),
+        "speedup_vs_greedy": None,
+        "speedup_vs_local": None,
     }
 
 
@@ -179,11 +246,13 @@ def run_arm(
     elif arm == "B":
         client = cloud_client or OfflineCloudClient(seed=task.seed)
         offline = isinstance(client, OfflineCloudClient)
-        router = AlwaysEscalateRouter(ResearchRouter(ledger, client=client))
+        router = AlwaysEscalateRouter(
+            ResearchRouter(ledger, client=client, seed=task.seed)
+        )
     else:
         client = cloud_client or OfflineCloudClient(seed=task.seed)
         offline = isinstance(client, OfflineCloudClient)
-        router = ResearchRouter(ledger, client=client)
+        router = ResearchRouter(ledger, client=client, seed=task.seed)
 
     oracle = ResearchOracle(backend, output_dir=run_dir)
     planner = ResearchPVPlanner(plan_size=len(PLAN_ORDER) if fixed_candidates else None)
@@ -212,10 +281,20 @@ def run_arm(
         json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    events = []
+    events_path = run_dir / "events.jsonl"
+    if events_path.exists():
+        for line in events_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                try:
+                    events.append(json.loads(line))
+                except Exception:
+                    continue
     return {
         "run_dir": str(run_dir),
         "summary": summary,
         "ledger": ledger.usage_ledger(),
+        "events": events,
         "offline": offline,
     }
 
@@ -242,8 +321,20 @@ def run_evaluate(
     ]
     rows = [_metrics_row(arm, record, price) for arm, record in zip(arms, records)]
 
+    by_arm = {row["arm"]: row for row in rows}
+    greedy_wall = float((by_arm.get("B") or {}).get("wall_seconds") or 0.0)
+    local_wall = float((by_arm.get("A") or {}).get("wall_seconds") or 0.0)
+    for row in rows:
+        wall = float(row.get("wall_seconds") or 0.0)
+        row["speedup_vs_greedy"] = (
+            round(greedy_wall / wall, 4) if greedy_wall > 0 and wall > 0 else None
+        )
+        row["speedup_vs_local"] = (
+            round(local_wall / wall, 4) if local_wall > 0 and wall > 0 else None
+        )
+
     metrics = {
-        "schema_version": "autoresearch-metrics-v1",
+        "schema_version": "autoresearch-metrics-v2",
         "task_id": task.task_id,
         "data_path": task.data_path,
         "cloud": cloud,

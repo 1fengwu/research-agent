@@ -7,7 +7,11 @@ import unittest
 from pathlib import Path
 
 from autoresearch.contracts import load_task_spec
-from autoresearch.evolution import AXIS_FOR_HYPOTHESIS, ResearchIterationStore
+from autoresearch.evolution import (
+    AXIS_FOR_HYPOTHESIS,
+    BaselineChanged,
+    ResearchIterationStore,
+)
 from autoresearch.research_pv import PLAN_ORDER, ResearchPVPlanner
 
 
@@ -74,6 +78,27 @@ class TestResearchEvolution(unittest.TestCase):
             hypothesis_ids = [spec.hypothesis_id for spec in specs]
             self.assertNotIn("volume", hypothesis_ids)
             self.assertIn("volatility", hypothesis_ids)
+            store.close()
+
+    def test_rollback_restores_eliminated_hypothesis(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            store = ResearchIterationStore(str(Path(folder) / "research-pv.db"))
+            store.record_signals([self._refute("volume")])
+            store.record_signals([self._refute("volume")])
+            excluded = [item[0] for item in store.active_plan_order(PLAN_ORDER)]
+            self.assertNotIn("volume", excluded)
+            result = store.rollback()
+            self.assertTrue(result["content_equals"])
+            restored = [item[0] for item in store.active_plan_order(PLAN_ORDER)]
+            self.assertIn("volume", restored)
+            store.close()
+
+    def test_rollback_rejects_stale_expectation(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            store = ResearchIterationStore(str(Path(folder) / "research-pv.db"))
+            store.record_signals([self._refute("volume")])
+            with self.assertRaises(BaselineChanged):
+                store.rollback(expected_active="does-not-exist")
             store.close()
 
 

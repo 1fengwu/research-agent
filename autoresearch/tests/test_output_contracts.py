@@ -138,7 +138,7 @@ def _pre_gate() -> Dict[str, Any]:
 
 def _metrics() -> Dict[str, Any]:
     return {
-        "schema_version": "autoresearch-metrics-v1",
+        "schema_version": "autoresearch-metrics-v2",
         "task_id": "task-1",
         "completion_rate": 1.0,
         "arms": [
@@ -158,6 +158,19 @@ def _metrics() -> Dict[str, Any]:
                 "usage_source": "none",
                 "cost": None,
                 "wall_seconds": 2.0,
+                "tokens_saved": 0,
+                "cache_hits": 0,
+                "local_rules": 0,
+                "cloud_calls_avoided": 0,
+                "baseline_auc": 0.62,
+                "auc_gain_vs_baseline": 0.01,
+                "per_10k_token_gain": None,
+                "negative_result_rate": 0.0,
+                "escalation_attempts": 0,
+                "escalation_hit_rate": 0.0,
+                "budget_blocked_rate": 0.0,
+                "speedup_vs_greedy": 1.0,
+                "speedup_vs_local": 1.0,
             }
         ],
     }

@@ -16,6 +16,23 @@ from .budget_gate import BudgetBlocked, BudgetExceeded, BudgetGate
 DIFFICULTY_THRESHOLD = 2.0
 
 
+PROMPT_VERSION = "research-pv-v2"
+
+
+def _sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _provider_of(client: Optional[Any]) -> str:
+    provider = getattr(client, "provider", None) if client is not None else None
+    if provider:
+        return str(provider)
+    base_url = getattr(client, "base_url", "") or ""
+    if "://" in base_url:
+        return base_url.split("://", 1)[1].split("/", 1)[0]
+    return "offline"
+
+
 def _tokenize_env_value(value: str) -> str:
     value = value.strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
@@ -77,12 +94,17 @@ def build_full_context(state: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def cache_key_for_decision(state: Dict[str, Any], summary: Dict[str, Any]) -> str:
-    """Stable decision key; run_id/budget are excluded so results replay across runs."""
+def _decision_body(state: Dict[str, Any], summary: Dict[str, Any]) -> Dict[str, Any]:
     last_trial = summary.get("last_trial") or {}
     if isinstance(last_trial, dict) and last_trial.get("truncated"):
         last_trial = {}
-    body = {
+    elif isinstance(last_trial, dict):
+        last_trial = {
+            key: value
+            for key, value in last_trial.items()
+            if key not in {"seconds", "ts", "timestamp"}
+        }
+    return {
         "phase": summary.get("phase"),
         "active_config": summary.get("active_config"),
         "evidence_ids": list(summary.get("evidence_ids", []) or []),
@@ -92,7 +114,20 @@ def cache_key_for_decision(state: Dict[str, Any], summary: Dict[str, Any]) -> st
         "data_anomaly": bool(state.get("data_anomaly")),
         "pending_candidates": summary.get("pending_candidates", []),
     }
-    canonical = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _decision_text(state: Dict[str, Any], summary: Dict[str, Any]) -> str:
+    return json.dumps(
+        _decision_body(state, summary),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def cache_key_for_decision(state: Dict[str, Any], summary: Dict[str, Any]) -> str:
+    """Stable decision key; run_id/budget are excluded so results replay across runs."""
+    canonical = _decision_text(state, summary)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:24]
 
 
@@ -123,6 +158,7 @@ class DecisionCache:
         self.max_entries = max_entries
         self._lock = threading.Lock()
         self._entries: Dict[str, Dict[str, Any]] = {}
+        self._invalid: Dict[str, Dict[str, Any]] = {}
         self._load()
 
     def _load(self) -> None:
@@ -133,8 +169,12 @@ class DecisionCache:
             entries = data.get("entries")
             if isinstance(entries, dict):
                 self._entries = {k: v for k, v in entries.items() if isinstance(v, dict)}
+            invalid = data.get("invalid")
+            if isinstance(invalid, dict):
+                self._invalid = {k: v for k, v in invalid.items() if isinstance(v, dict)}
         except Exception:
             self._entries = {}
+            self._invalid = {}
 
     def _save(self) -> None:
         if self.path is None:
@@ -142,6 +182,7 @@ class DecisionCache:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "entries": self._entries,
+            "invalid": self._invalid,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         tmp = self.path.with_suffix(self.path.suffix + ".tmp")
@@ -158,6 +199,19 @@ class DecisionCache:
             if len(self._entries) > self.max_entries:
                 for stale in list(self._entries)[: len(self._entries) - self.max_entries]:
                     self._entries.pop(stale, None)
+            self._save()
+
+    def get_invalid(self, key: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            value = self._invalid.get(key)
+            return dict(value) if value else None
+
+    def set_invalid(self, key: str, payload: Dict[str, Any]) -> None:
+        with self._lock:
+            self._invalid[key] = payload
+            if len(self._invalid) > self.max_entries:
+                for stale in list(self._invalid)[: len(self._invalid) - self.max_entries]:
+                    self._invalid.pop(stale, None)
             self._save()
 
     def size(self) -> int:
@@ -362,6 +416,8 @@ class HttpJsonCloudClient:
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
         model: Optional[str] = None,
+        temperature: Optional[float] = None,
+        seed: Optional[int] = None,
     ) -> None:
         self.base_url = (
             base_url
@@ -370,6 +426,23 @@ class HttpJsonCloudClient:
         ).rstrip("/")
         self.api_key = api_key or os.environ.get("ARC_LLM_API_KEY", "").strip()
         self.model = model or os.environ.get("ARC_LLM_MODEL", "").strip()
+        raw_temperature = temperature if temperature is not None else os.environ.get("ARC_LLM_TEMPERATURE", "")
+        try:
+            self.temperature = float(raw_temperature)
+        except (TypeError, ValueError):
+            self.temperature = 0.0
+        raw_seed = seed if seed is not None else os.environ.get("ARC_LLM_SEED", "")
+        try:
+            self.seed = int(raw_seed) if str(raw_seed).strip() else None
+        except (TypeError, ValueError):
+            self.seed = None
+
+    @property
+    def provider(self) -> str:
+        host = ""
+        if "://" in self.base_url:
+            host = self.base_url.split("://", 1)[1].split("/", 1)[0]
+        return host or "openai-compatible"
 
     def configured(self) -> bool:
         return bool(self.base_url and self.api_key and self.model)
@@ -391,6 +464,7 @@ class HttpJsonCloudClient:
                 {"role": "user", "content": json.dumps(summary, ensure_ascii=False)},
             ],
             "max_tokens": int(max_tokens),
+            "temperature": self.temperature,
         }
         data = json.dumps(payload).encode("utf-8")
         request = Request(
@@ -465,6 +539,8 @@ class ResearchRouter:
         timeout_s: float = 30.0,
         cache: Optional[DecisionCache] = None,
         cache_path: Optional[str] = None,
+        seed: Optional[int] = None,
+        temperature: Optional[float] = None,
     ) -> None:
         self.ledger = ledger
         self.client = client
@@ -472,6 +548,12 @@ class ResearchRouter:
         self.max_output_tokens = max_output_tokens
         self.timeout_s = timeout_s
         self.cache = cache or DecisionCache(cache_path)
+        self.provider = _provider_of(client)
+        self.model = getattr(client, "model", None)
+        self.seed = seed if seed is not None else getattr(client, "seed", None)
+        self.temperature = (
+            temperature if temperature is not None else getattr(client, "temperature", None)
+        )
         self.cache_hits = 0
         self.cache_saved_tokens = 0
         self.local_rule_decisions = 0
@@ -539,6 +621,39 @@ class ResearchRouter:
                     "source": "local",
                     "saved_tokens_estimate": saved,
                 }
+
+        invalid_hit = self.cache.get_invalid(decision_key)
+        if invalid_hit is not None:
+            saved = compact_input + decision_cap
+            base_reply = local_rule_decision(state)
+            reply = base_reply if base_reply is not None else {
+                "decision": "avoid_repeat_invalid_keep_current_path",
+                "evidence_ids": list(state.get("evidence_ids", []) or []),
+                "actions": [{"action": "continue"}],
+            }
+            self.local_rule_decisions += 1
+            self.local_rule_saved_tokens += saved
+            self._emit(
+                "research.local_rule",
+                phase,
+                "invalid_reply_reuse",
+                extra={
+                    "trigger": raw_reasons or reasons,
+                    "mode": mode,
+                    "failure_signature": invalid_hit.get("failure_signature") or "",
+                    "saved_tokens_estimate": saved,
+                },
+            )
+            return {
+                "escalated": True,
+                "valid": True,
+                "reply": reply,
+                "reasons": raw_reasons or reasons,
+                "tokens": None,
+                "mode": mode,
+                "source": "local",
+                "saved_tokens_estimate": saved,
+            }
 
         cached = self.cache.get(decision_key)
         if cached is not None and isinstance(cached.get("reply"), dict):
@@ -703,6 +818,20 @@ class ResearchRouter:
             "actual_output": actual_out,
             "charged": int(actual_in) + int(actual_out),
         }
+        meta = {
+            "prompt_version": PROMPT_VERSION,
+            "prompt_hash": _sha256(
+                STRUCTURED_REPLY_PROMPT + "|" + _decision_text(state, summary)
+            ),
+            "response_hash": _sha256(content),
+            "model": self.model,
+            "provider": self.provider,
+            "seed": self.seed,
+            "temperature": self.temperature,
+            "max_tokens": int(max_out),
+            "timeout_s": float(self.timeout_s),
+            "finish_reason": str(raw.get("finish_reason") or ""),
+        }
         try:
             entry = self.ledger.record_cloud(
                 estimated_input=input_est,
@@ -710,6 +839,7 @@ class ResearchRouter:
                 actual_output=actual_out,
                 decision_note=f"trigger={reasons[0]}",
                 overrun=allow_overrun,
+                meta=meta,
             )
         except BudgetExceeded as exc:
             note = f"budget_exceeded:{exc}"
@@ -734,6 +864,17 @@ class ResearchRouter:
         parsed = parse_json_content(content)
         ok, invalid_reason, reply = validate_reply(parsed)
         if not ok:
+            failure_signature = _sha256(
+                "|".join((invalid_reason, meta["finish_reason"], content))
+            )
+            self.ledger.patch_last_cloud_entry(failure_signature=failure_signature)
+            self.cache.set_invalid(
+                decision_key,
+                {
+                    "failure_signature": failure_signature,
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                },
+            )
             self._emit(
                 "research.escalation_invalid",
                 phase,
@@ -744,6 +885,7 @@ class ResearchRouter:
                     "reply_preview": str(content)[:300],
                     "finish_reason": str(raw.get("finish_reason") or ""),
                     "content_length": len(content),
+                    "failure_signature": failure_signature,
                 },
             )
             return {
@@ -763,6 +905,7 @@ class ResearchRouter:
                 "input": int(tokens["actual_input"]),
                 "output": int(tokens["actual_output"]),
                 "ts": datetime.now(timezone.utc).isoformat(),
+                "meta": meta,
             },
         )
         self._emit(

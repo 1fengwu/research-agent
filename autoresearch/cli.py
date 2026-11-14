@@ -187,6 +187,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         ledger,
         client=cloud_client,
         cache_path=str(Path(args.output_dir) / "cache" / "decision-cache.json"),
+        seed=task.seed,
     )
     from .agent_loop import EventWriter, ResearchOrchestrator
 

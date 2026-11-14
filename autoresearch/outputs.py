@@ -174,6 +174,12 @@ def validate_ledger(ledger: Dict[str, Any]) -> None:
                 ),
                 f"ledger.entries[{index}]",
             )
+            if "meta" in entry:
+                _require_dict(entry["meta"], f"ledger.entries[{index}].meta")
+            if "failure_signature" in entry and not isinstance(entry["failure_signature"], str):
+                raise TypeError(
+                    f"ledger.entries[{index}].failure_signature 必须是字符串"
+                )
         else:
             raise ValueError(
                 f"ledger.entries[{index}].kind 未知: {kind}（允许 candidate/cloud_call）"

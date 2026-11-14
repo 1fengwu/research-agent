@@ -18,7 +18,7 @@ if str(_FRAMEWORK) not in sys.path:
 
 from core.evolution import learn, policy  # noqa: E402
 from core.evolution.spec import Axis, DomainSpec, Hypothesis, Signal  # noqa: E402
-from core.evolution.store import Store  # noqa: E402
+from core.evolution.store import BaselineChanged, Store  # noqa: E402
 
 SUBJECT = "autoresearch-research-pv"
 
@@ -199,6 +199,56 @@ class ResearchIterationStore:
             "version_id": version_id,
             "changes": candidate.get("changes") or [],
             "info": info,
+        }
+
+    def rollback(
+        self,
+        *,
+        target: Optional[str] = None,
+        expected_active: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """回退 = 复制目标快照生成新版本；已有运行继续用自己锁定的版本。"""
+        active = self.store.active_version(self._subject_id, RESEARCH_SPEC.name)
+        if active is None:
+            raise KeyError("还没有策略，无法回退")
+        if expected_active is not None and active["id"] != expected_active:
+            raise BaselineChanged(
+                f"活跃版本 {active['id']} != 期望 {expected_active}"
+            )
+        target_id = target
+        if target_id is None:
+            if active["parent_id"] is None:
+                raise ValueError("已经是初始版本，没有可回退的上一版")
+            target_id = active["parent_id"]
+        target_version = self.store.version(target_id)
+        if target_version is None:
+            raise KeyError(f"目标版本不存在 {target_id}")
+        snapshot = policy.restore(
+            self.store.snapshot(target_id),
+            restored_from=target_id,
+        )
+        version_id = self.store.commit_evolution(
+            subject_id=self._subject_id,
+            domain=RESEARCH_SPEC.name,
+            snapshot=snapshot,
+            reason=f"rollback from {active['seq']} to {target_version['seq']}",
+            expected_active=active["id"],
+            restored_from_id=target_id,
+            event_type="rollback",
+            payload={
+                "from": active["seq"],
+                "to": target_version["seq"],
+                "restored_from": target_id,
+            },
+        )
+        self._active_version_id = version_id
+        new_version = self.store.version(version_id)
+        return {
+            "new_version_id": version_id,
+            "new_seq": new_version["seq"],
+            "restored_from_seq": target_version["seq"],
+            "content_equals": policy.snapshot_hash(snapshot)
+            == policy.snapshot_hash(self.store.snapshot(target_id)),
         }
 
     def summary(self) -> Dict[str, Any]:

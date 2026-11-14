@@ -22,7 +22,7 @@ from autoresearch.contracts import (
     normalize_trial_result,
     validate_run_event,
 )
-from autoresearch.evaluate import OfflineCloudClient, run_arm, run_evaluate
+from autoresearch.evaluate import _extract_merged_auc, OfflineCloudClient, run_arm, run_evaluate
 from autoresearch.experiment import ResearchBackend
 from autoresearch.llm_router import NullCloudClient, ResearchRouter
 from autoresearch.oracle import ResearchOracle
@@ -223,6 +223,13 @@ class OracleAdversarialTest(unittest.TestCase):
 
 
 class EvaluateTest(unittest.TestCase):
+    def test_baseline_auc_extracted_from_truncated_preview(self) -> None:
+        payload = {
+            "truncated": True,
+            "preview": '{"merged_auc": 0.661491, "config": {"model": "logistic"',
+        }
+        self.assertAlmostEqual(_extract_merged_auc(payload), 0.661491, places=6)
+
     def test_fixed_candidates_executes_cloud_selection_and_preserves_test(self) -> None:
         client = OfflineCloudClient(reply={
             "decision": "test momentum first",
@@ -246,12 +253,24 @@ class EvaluateTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=REPO_ROOT) as folder:
             metrics = run_evaluate(make_task(), Path(folder), price=0.02)
             self.assertEqual([row["arm"] for row in metrics["arms"]], ["A", "B", "C"])
+            self.assertEqual(metrics["schema_version"], "autoresearch-metrics-v2")
             self.assertGreaterEqual(float(metrics["completion_rate"]), 0.0)
             a_row = next(row for row in metrics["arms"] if row["arm"] == "A")
             self.assertEqual(a_row["cloud_calls"], 0)
             b_row = next(row for row in metrics["arms"] if row["arm"] == "B")
             self.assertGreater(b_row["cloud_calls"], 0)
             self.assertEqual(b_row["usage_source"], "offline_simulated")
+            for key in (
+                "negative_result_rate",
+                "escalation_hit_rate",
+                "budget_blocked_rate",
+                "per_10k_token_gain",
+                "speedup_vs_greedy",
+                "speedup_vs_local",
+            ):
+                self.assertIn(key, b_row)
+            self.assertGreaterEqual(b_row["negative_result_rate"], 0.0)
+            self.assertLessEqual(b_row["negative_result_rate"], 1.0)
             for name in ("metrics.csv", "metrics.json", "task.json"):
                 self.assertTrue((Path(folder) / name).exists())
 

@@ -261,6 +261,7 @@ class BudgetGate:
         actual_output: int,
         decision_note: str = "",
         overrun: bool = False,
+        meta: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         charged = int(actual_input) + int(actual_output)
         with self._lock:
@@ -276,6 +277,7 @@ class BudgetGate:
                 "decision_note": decision_note,
                 "mode": self.budget_mode(),
                 "overrun": bool(overrun or self.overrun()),
+                "meta": dict(meta or {}),
             }
             self._entries.append(entry)
             used = self._used_cloud_tokens
@@ -283,6 +285,16 @@ class BudgetGate:
         if self.hard and used > self.limits.cloud_tokens:
             raise BudgetExceeded(used, self.limits.cloud_tokens)
         return entry
+
+    def patch_last_cloud_entry(self, **updates: Any) -> Dict[str, Any]:
+        """Attach post-call fields (for example failure_signature) to the newest bill."""
+        with self._lock:
+            for entry in reversed(self._entries):
+                if entry.get("kind") == "cloud_call":
+                    entry.update(updates)
+                    self._save()
+                    return dict(entry)
+            raise KeyError("ledger has no cloud_call entry")
 
     def stop_reason(self) -> Optional[str]:
         """Return a stop reason only in hard mode; soft mode never stops here.
