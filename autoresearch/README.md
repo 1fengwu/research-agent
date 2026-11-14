@@ -106,6 +106,15 @@ python -m autoresearch.replay --run-id <run_id> --output-dir .arc
 python -m unittest autoresearch.tests.test_c_tasks -v
 ```
 
+## 后端输出契约
+
+- 契约说明：[docs/后端数据契约.md](../docs/后端数据契约.md)
+- 契约校验器：[`autoresearch/outputs.py`](outputs.py)
+- 契约测试：[`autoresearch/tests/test_output_contracts.py`](tests/test_output_contracts.py)
+
+前端、API 队友和评审回放都按这套结构消费事件流、summary、ledger、verdicts、
+metrics、pre_gate 与 replay 输出；字段变更必须同步更新契约文档与测试。
+
 ## D 说明：界面与报告
 
 角色 D 的交付位于本包：
