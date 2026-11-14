@@ -1,0 +1,87 @@
+{
+  "schema_version": "autoresearch-pre-gate-v1",
+  "task_id": "task-roadshow-mock",
+  "data_path": "data/demo_panel.csv",
+  "data_hash": "sha256:549019389da7d054902fd97cdbb32b6d4c30bf8d575dae0c981456ec8bb28297",
+  "split_fingerprint": "sha256:53a2d4344b92137ff5a8c01b8c560e08f13cc6091c920b988a3bb1c37173f198",
+  "seed": 42,
+  "reps": 2000,
+  "conclusion": "pass",
+  "passed": true,
+  "reasons": [
+    "best_candidate=exp-004 merged_auc=0.675808"
+  ],
+  "source": "mock",
+  "baseline": {
+    "experiment_id": "baseline",
+    "merged_auc": 0.661491,
+    "val1": {"auc": 0.661491, "valid_days": 100, "excluded": 12},
+    "val2": {"auc": 0.661491, "valid_days": 100, "excluded": 11}
+  },
+  "candidates": [
+    {
+      "experiment_id": "exp-001",
+      "feature_set": "+volatility",
+      "model": "logistic",
+      "merged_auc": 0.667523,
+      "val1": {"auc": 0.668601, "valid_days": 96, "excluded": 14},
+      "val2": {"auc": 0.666445, "valid_days": 97, "excluded": 12},
+      "delta": 0.006032,
+      "paired_ci": {
+        "val1": {"lower": -0.001, "upper": 0.013},
+        "val2": {"lower": -0.004, "upper": 0.010},
+        "merged": {"lower": -0.002, "upper": 0.012}
+      },
+      "passed": false,
+      "reasons": ["merged_ci_lower_not_positive(-0.002000)"]
+    },
+    {
+      "experiment_id": "exp-002",
+      "feature_set": "+volume",
+      "model": "logistic",
+      "merged_auc": 0.655951,
+      "val1": {"auc": 0.661902, "valid_days": 95, "excluded": 15},
+      "val2": {"auc": 0.650001, "valid_days": 96, "excluded": 13},
+      "delta": -0.005540,
+      "paired_ci": {
+        "val1": {"lower": -0.010, "upper": 0.004},
+        "val2": {"lower": -0.018, "upper": -0.001},
+        "merged": {"lower": -0.012, "upper": 0.001}
+      },
+      "passed": false,
+      "reasons": ["val2_drop(0.650001<0.651491)"]
+    },
+    {
+      "experiment_id": "exp-003",
+      "feature_set": "+volatility_volume",
+      "model": "logistic",
+      "merged_auc": 0.659524,
+      "val1": {"auc": 0.658813, "valid_days": 96, "excluded": 16},
+      "val2": {"auc": 0.660235, "valid_days": 95, "excluded": 14},
+      "delta": -0.001967,
+      "paired_ci": {
+        "val1": {"lower": -0.008, "upper": 0.005},
+        "val2": {"lower": -0.007, "upper": 0.006},
+        "merged": {"lower": -0.006, "upper": 0.004}
+      },
+      "passed": false,
+      "reasons": ["merged_auc_not_above_baseline(0.659524<=0.661491)"]
+    },
+    {
+      "experiment_id": "exp-004",
+      "feature_set": "base",
+      "model": "tree_shallow",
+      "merged_auc": 0.675808,
+      "val1": {"auc": 0.672012, "valid_days": 97, "excluded": 12},
+      "val2": {"auc": 0.679604, "valid_days": 98, "excluded": 11},
+      "delta": 0.014317,
+      "paired_ci": {
+        "val1": {"lower": 0.002, "upper": 0.021},
+        "val2": {"lower": 0.004, "upper": 0.028},
+        "merged": {"lower": 0.005, "upper": 0.024}
+      },
+      "passed": true,
+      "reasons": []
+    }
+  ]
+}

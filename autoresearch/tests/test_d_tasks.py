@@ -10,7 +10,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from autoresearch import report
+from autoresearch import report, ui
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MOCK_EVENTS = REPO_ROOT / "autoresearch" / "mock_events.json"
@@ -66,6 +66,98 @@ class TestDMockEvents(unittest.TestCase):
                     handle.write(json.dumps(event, ensure_ascii=False) + "\n")
             loaded = report.load_events(path)
         self.assertEqual(loaded, source[:3])
+
+    def test_token_usage_series_shape(self) -> None:
+        events = report.load_events(MOCK_EVENTS)
+        summary = report.summarize_run(report.group_runs(events)[0]["events"])
+        rows = report.token_usage_series(summary)
+        self.assertTrue(rows)
+        self.assertIn("used_cloud_tokens", rows[0])
+        self.assertIn("remaining_cloud_tokens", rows[0])
+
+    def test_run_token_comparison_labels(self) -> None:
+        events = report.load_events(MOCK_EVENTS)
+        runs = report.group_runs(events)
+        rows = report.run_token_comparison(runs)
+        self.assertEqual(rows[0]["label"], "进化前（第 1 轮）")
+        self.assertIn("进化后", rows[1]["label"])
+        self.assertIn("used_cloud_tokens", rows[0])
+
+    def test_track_results_are_visual_not_code(self) -> None:
+        events = report.load_events(MOCK_EVENTS)
+        summary = report.summarize_run(report.group_runs(events)[0]["events"])
+        timeline = ui.timeline_html(summary["events"])
+        experiments = ui.experiments_html(summary)
+        hypotheses = ui.hypotheses_html(summary)
+        self.assertIn("ar-timeline", timeline)
+        self.assertIn("ar-exp-card", experiments)
+        self.assertIn("ar-chip", hypotheses)
+        for html_text in (timeline, experiments, hypotheses):
+            self.assertNotIn("`", html_text)
+        self.assertNotIn("research.", timeline)
+
+
+class TestUIHelpers(unittest.TestCase):
+    def test_labels_and_unknown_values(self) -> None:
+        self.assertEqual(ui.phase_label("PARTIAL_COMPLETED"), "部分完成")
+        self.assertEqual(ui.phase_label("unknown"), "unknown")
+        self.assertEqual(ui.verdict_label("refuted"), "反驳")
+        self.assertEqual(ui.event_label("research.revised"), "证据修正")
+
+    def test_mode_and_progress_helpers(self) -> None:
+        mode, style = ui.source_mode("离线演示（mock_events.json）")
+        self.assertEqual(mode, "离线回放")
+        self.assertEqual(style, "info")
+        mode, style = ui.source_mode(".arc/runner-events.jsonl")
+        self.assertEqual(mode, "真实研究")
+        self.assertEqual(style, "success")
+        mode, style = ui.source_mode(".arc/demo/runner-events.jsonl")
+        self.assertEqual(mode, "离线回放")
+        self.assertEqual(style, "info")
+        self.assertEqual(ui.progress_fraction(50, 100), 0.5)
+        self.assertEqual(ui.progress_fraction(None, 100), 0.0)
+
+    def test_summary_and_metrics_helpers(self) -> None:
+        stats = ui.experiment_summary(
+            {
+                "experiments": [
+                    {"verdict": {"verdict": "supported"}},
+                    {"verdict": {"verdict": "refuted"}},
+                ],
+                "revised_count": 1,
+                "escalation_blocked": [{"type": "research.escalation_blocked"}],
+                "evidence_ids": ["E1"],
+            }
+        )
+        self.assertEqual(stats["experiments"], 2)
+        self.assertEqual(stats["supported"], 1)
+        self.assertEqual(stats["refuted"], 1)
+        self.assertEqual(stats["blocked"], 1)
+        self.assertEqual(
+            ui.metrics_arms({"arms": [{"arm": "A"}, {"arm": "B"}]}),
+            [{"arm": "A"}, {"arm": "B"}],
+        )
+
+    def test_innovation_points_are_display_ready(self) -> None:
+        points = ui.innovation_points()
+        self.assertEqual(len(points), 4)
+        self.assertTrue(
+            all({"title", "detail", "tag"} <= set(item) for item in points)
+        )
+
+    def test_roadshow_step_helper(self) -> None:
+        self.assertEqual(ui.roadshow_step(0)["step"]["title"], "问题定义与数据")
+        self.assertEqual(ui.roadshow_step(240)["step"]["title"], "复现包与收尾")
+        self.assertGreaterEqual(ui.roadshow_step(60)["index"], 0)
+
+    def test_mock_demo_fixtures_exist(self) -> None:
+        self.assertTrue((REPO_ROOT / "autoresearch" / "mock_metrics.json").exists())
+        self.assertTrue((REPO_ROOT / "autoresearch" / "mock_pre_gate.json").exists())
+
+    def test_reason_text_is_natural_language(self) -> None:
+        text = ui.reason_text("budget_blocked:cloud_token_reserve_exhausted")
+        self.assertIn("预算不足", text)
+        self.assertIn("预留云 token 不足", text)
 
 
 class TestDReport(unittest.TestCase):
