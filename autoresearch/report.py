@@ -331,6 +331,9 @@ def render_markdown(summary: Dict[str, Any]) -> str:
         lines.append(f"- 独立测试 AUC：`{_fmt(metric.get('auc'))}`")
         if metric.get("valid_days") is not None:
             lines.append(f"- 独立测试有效天数：`{metric.get('valid_days')}`")
+        for name in ("spearman", "brier", "pr_auc"):
+            if metric.get(name) is not None:
+                lines.append(f"- 独立测试 {name}：`{_fmt(metric.get(name))}`")
     else:
         lines.append("- 未执行独立测试（预算不足或部分完成）。")
     lines.append("")
