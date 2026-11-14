@@ -1,4 +1,4 @@
-"""AutoResearch 角色 D：事件展示、报告、复现包与 CLI 回放测试。"""
+"""Helix 赫力 角色 D：事件展示、报告、复现包与 CLI 回放测试。"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""AutoResearch 角色 D：单页 Streamlit 评审工作台。
+"""Helix 赫力 角色 D：单页 Streamlit 评审工作台。
 
 消费 A 的事件流、B 的数据摘要和 C 的指标；本文件不生成研究结论、
 不写 holdout、不调用 LLM。运行方式：
@@ -362,8 +362,8 @@ def _render_review(summary: Dict[str, Any]) -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="AutoResearch 评审工作台", layout="wide")
-    st.title("AutoResearch 研究验证工作台")
+    st.set_page_config(page_title="Helix 赫力 评审工作台", layout="wide")
+    st.title("Helix 赫力 · 量价信号验证工作台")
     st.caption("D 薄壳界面：只读 A 事件、C 指标与 B 数据摘要，不做研究决策。")
 
     source = st.sidebar.radio("数据源", _source_options())

@@ -1,4 +1,4 @@
-"""AutoResearch: A owns orchestration and reasoning."""
+"""Helix 赫力: A owns orchestration and reasoning."""
 
 from .contracts import (
     BudgetSpec,

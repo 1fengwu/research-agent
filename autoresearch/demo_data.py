@@ -1,4 +1,4 @@
-"""AutoResearch 角色 B：固定 seed 的演示量价面板生成器。
+"""Helix 赫力 角色 B：固定 seed 的演示量价面板生成器。
 
 用法：python -m autoresearch.demo_data
 
@@ -106,7 +106,7 @@ def write_demo_artifacts(data_dir=None) -> Dict[str, str]:
     digest = file_sha256(demo_path)
     hash_path.write_text(digest + "\n", encoding="utf-8")
     (data_dir / "README.md").write_text(
-        "本目录是 AutoResearch 角色 B 的固定 seed 演示数据。\n\n"
+        "本目录是 Helix 赫力 角色 B 的固定 seed 演示数据。\n\n"
         "- demo_panel.csv：完整演示面板，14 个标的，320 个交易日；固定 seed=42。\n"
         "- demo_panel.csv.sha256：文件字节的 sha256；运行期内容指纹使用 canonical_panel_hash() 计算。\n"
         "- demo_split.json：固定 seed=42 的时间切分、指纹与分段日期。\n"
@@ -126,7 +126,7 @@ def write_demo_artifacts(data_dir=None) -> Dict[str, str]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="生成 AutoResearch 演示量价面板")
+    parser = argparse.ArgumentParser(description="生成 Helix 赫力 演示量价面板")
     parser.add_argument("--data-dir", default=None, help="输出目录，默认 framework/data")
     args = parser.parse_args()
     artifacts = write_demo_artifacts(args.data_dir)

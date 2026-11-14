@@ -1,4 +1,4 @@
-"""AutoResearch 研究策略自进化桥测试。"""
+"""Helix 赫力 研究策略自进化桥测试。"""
 
 from __future__ import annotations
 

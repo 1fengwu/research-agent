@@ -1,4 +1,4 @@
-# AutoResearch 四人分工执行手册
+# Helix 赫力 四人分工执行手册
 
 **版本**：对应《ResearchAgent-系统设计-v5.md》的落地执行版
 

@@ -1,4 +1,4 @@
-"""AutoResearch 角色 D：事件展示、报告生成与复现包打包。
+"""Helix 赫力 角色 D：事件展示、报告生成与复现包打包。
 
 D 只消费 A 的事件流、B 的数据摘要和 C 的指标/verdict 文件；
 不生成研究结论、不写 holdout、不调用 LLM。
@@ -246,7 +246,7 @@ def render_markdown(summary: Dict[str, Any]) -> str:
     baseline = summary.get("baseline") or {}
     budget = summary.get("budget") or {}
     lines: List[str] = []
-    lines.append(f"# AutoResearch 研究运行报告 — {run_id}")
+    lines.append(f"# Helix 赫力 研究运行报告 — {run_id}")
     lines.append("")
 
     lines.append("## 1. 运行信息")

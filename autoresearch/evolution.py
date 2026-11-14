@@ -1,4 +1,4 @@
-"""AutoResearch 研究策略自进化桥。
+"""Helix 赫力 研究策略自进化桥。
 
 把 framework/core/evolution 的策略学习（elimination/UCB、闸门、版本提交）
 接到 `ResearchPVPlanner`：每次 `interpret()` 产生的信号会写进 SQLite 策略库，
@@ -38,7 +38,7 @@ AXIS_FOR_HYPOTHESIS = {
 
 RESEARCH_SPEC = DomainSpec(
     name="autoresearch-research-pv",
-    title="AutoResearch 量价研究策略",
+    title="Helix 赫力 量价研究策略",
     version="1.0",
     axes=[
         Axis(

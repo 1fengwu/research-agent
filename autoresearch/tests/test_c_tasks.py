@@ -1,4 +1,4 @@
-"""AutoResearch 角色 C：评测与复现模块测试。"""
+"""Helix 赫力 角色 C：评测与复现模块测试。"""
 
 from __future__ import annotations
 

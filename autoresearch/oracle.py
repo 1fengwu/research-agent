@@ -1,4 +1,4 @@
-"""AutoResearch 角色 C：holdout 裁判，唯一出分口。
+"""Helix 赫力 角色 C：holdout 裁判，唯一出分口。
 
 纪律：
 - 锁定前任何独立测试请求都被拒绝；

@@ -1,12 +1,12 @@
-# Research Agent System（AutoResearch）
+# Helix 赫力 · 量价信号自主验证工作台
 
-Research Agent System 的竞赛交付仓库：面向量价信号验证场景，以 ARC agent 框架为内核，把“规划—收集证据—提出假设—实验/分析—验证—修正”做成一条可追溯、可复现、可回退、可计费的研究闭环。
+Helix 赫力 的竞赛交付仓库（代码包名沿用 autoresearch）：面向量价信号验证场景，以 ARC agent 框架为内核，把“规划—收集证据—提出假设—实验/分析—验证—修正”做成一条可追溯、可复现、可回退、可计费的研究闭环。
 
 ## 目录
 
 | 目录 | 内容 |
 |---|---|
-| `docs/ResearchAgent-系统设计-v5.md` | 系统设计 v5：AutoResearch 量价信号验证工作台 |
+| `docs/ResearchAgent-系统设计-v5.md` | 系统设计 v5：Helix 赫力 量价信号验证工作台 |
 | `docs/AutoResearch-四人分工执行手册.md` | 四人 A/B/C/D 分工、小时级排期、接口、测试、红线、演示 |
 | `docs/后端数据契约.md` | 前端、API、评测/复现共同消费的输出字段契约 |
 | `framework/` | ARC agent 框架源码（agent-arc-based） |

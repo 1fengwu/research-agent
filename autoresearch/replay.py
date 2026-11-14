@@ -1,4 +1,4 @@
-"""AutoResearch 角色 C：无云复现与复现包校验。
+"""Helix 赫力 角色 C：无云复现与复现包校验。
 
 replay 不使用云模型：它从 task.json/事件流重建任务，用 oracle 对锁定配置
 再跑一次 holdout，并和原运行记录比对数据哈希、切分指纹、测试指标、

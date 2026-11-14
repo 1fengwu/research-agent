@@ -1,4 +1,4 @@
-"""Run AutoResearch against a local CSV."""
+"""Run the Helix 赫力 research loop against a local CSV."""
 
 import argparse
 import json

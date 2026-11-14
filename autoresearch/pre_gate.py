@@ -1,4 +1,4 @@
-"""AutoResearch 角色 C：数据前置门（pre_gate）。
+"""Helix 赫力 角色 C：数据前置门（pre_gate）。
 
 固定基线 + 前 3 个候选在两个验证窗各跑一次，输出日均 AUC、有效天数、
 排除样本数和配对 bootstrap 95% CI。没有可证伪的研究空间时返回失败，

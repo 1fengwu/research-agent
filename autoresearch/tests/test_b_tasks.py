@@ -1,4 +1,4 @@
-"""AutoResearch 角色 B：数据、实验、规划器与 A↔B 端到端测试。"""
+"""Helix 赫力 角色 B：数据、实验、规划器与 A↔B 端到端测试。"""
 
 from __future__ import annotations
 

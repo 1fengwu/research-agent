@@ -1,4 +1,4 @@
-"""AutoResearch 角色 B：量价研究规划器（A 的 PlannerPort 实现）。"""
+"""Helix 赫力 角色 B：量价研究规划器（A 的 PlannerPort 实现）。"""
 
 from __future__ import annotations
 

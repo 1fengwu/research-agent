@@ -1,4 +1,4 @@
-"""AutoResearch 角色 D：CLI 回放/启动路径。
+"""Helix 赫力 角色 D：CLI 回放/启动路径。
 
 D 的界面退化时使用 `python -m autoresearch.cli ...`：
 - `replay / report`：只读事件文件，输出回放与报告/复现包；
