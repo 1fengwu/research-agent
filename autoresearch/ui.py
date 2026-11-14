@@ -193,6 +193,8 @@ def source_mode(source: str) -> Tuple[str, str]:
         or "/demo/runner-events" in text
     ):
         return "离线回放", "info"
+    if "已保存评测" in text:
+        return "评测回放", "success"
     if ".arc" in text or "runner-events" in text:
         return "真实研究", "success"
     return "自定义数据源", "info"

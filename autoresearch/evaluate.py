@@ -29,7 +29,7 @@ from .llm_router import (
     estimate_tokens,
 )
 from .oracle import ResearchOracle
-from .research_pv import ResearchPVPlanner
+from .research_pv import PLAN_ORDER, ResearchPVPlanner
 
 
 class OfflineCloudClient:
@@ -72,8 +72,10 @@ class AlwaysEscalateRouter:
         self.delegate = delegate
 
     def escalate_if_needed(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        state["critical_decision"] = True
-        return self.delegate.escalate_if_needed(state)
+        self.delegate.event_cb = self.event_cb
+        return self.delegate.escalate_if_needed({**state, "critical_decision": True})
+
+    event_cb = None
 
     def savings_summary(self) -> Dict[str, Any]:
         return self.delegate.savings_summary()
@@ -162,6 +164,7 @@ def run_arm(
     arm: str,
     *,
     cloud_client: Optional[Any] = None,
+    fixed_candidates: bool = False,
 ) -> Dict[str, Any]:
     run_id = f"R-{arm}-{uuid.uuid4().hex[:12]}"
     run_dir = root / arm / run_id
@@ -183,7 +186,7 @@ def run_arm(
         router = ResearchRouter(ledger, client=client)
 
     oracle = ResearchOracle(backend, output_dir=run_dir)
-    planner = ResearchPVPlanner()
+    planner = ResearchPVPlanner(plan_size=len(PLAN_ORDER) if fixed_candidates else None)
     writer = EventWriter(run_dir / "events.jsonl")
     summary = ResearchOrchestrator(
         task,
@@ -195,6 +198,7 @@ def run_arm(
         writer=writer,
         run_id=run_id,
         run_ledger_dir=run_dir / "ledgers",
+        candidate_limit=task.budget.candidates if fixed_candidates else None,
     ).run()
     prepared = backend.prepared_split()
     summary["data_hash"] = prepared.meta.get("data_hash") or ""
@@ -223,6 +227,7 @@ def run_evaluate(
     cloud: bool = False,
     price: Optional[float] = None,
     arms: Sequence[str] = ("A", "B", "C"),
+    fixed_candidates: bool = False,
 ) -> Dict[str, Any]:
     root = Path(out_dir)
     root.mkdir(parents=True, exist_ok=True)
@@ -231,7 +236,10 @@ def run_evaluate(
             "--cloud requires ARC_LLM_BASE_URL, ARC_LLM_API_KEY and ARC_LLM_MODEL"
         )
     cloud_client: Any = HttpJsonCloudClient() if cloud else OfflineCloudClient(seed=task.seed)
-    records = [run_arm(task, root, arm, cloud_client=cloud_client) for arm in arms]
+    records = [
+        run_arm(task, root, arm, cloud_client=cloud_client, fixed_candidates=fixed_candidates)
+        for arm in arms
+    ]
     rows = [_metrics_row(arm, record, price) for arm, record in zip(arms, records)]
 
     metrics = {
@@ -239,6 +247,7 @@ def run_evaluate(
         "task_id": task.task_id,
         "data_path": task.data_path,
         "cloud": cloud,
+        "candidate_limit": task.budget.candidates if fixed_candidates else None,
         "completion_rate": round(
             sum(float(row["completion"]) for row in rows) / len(rows), 6
         ),
@@ -270,6 +279,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--price-per-1k-tokens", type=float, default=None)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--candidates", type=int, default=4)
+    parser.add_argument("--fixed-candidates", action="store_true", help="share the full candidate pool and enforce the same experiment cap")
     parser.add_argument("--cloud-calls", type=int, default=3)
     parser.add_argument("--cloud-tokens", type=int, default=6000)
     args = parser.parse_args(argv)
@@ -291,6 +301,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         args.out,
         cloud=args.cloud,
         price=args.price_per_1k_tokens,
+        fixed_candidates=args.fixed_candidates,
     )
     print(json.dumps(metrics, ensure_ascii=True, indent=2))
     return 0 if float(metrics["completion_rate"]) > 0 else 1

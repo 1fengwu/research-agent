@@ -34,10 +34,12 @@ class ResearchPVPlanner:
         self,
         order: Optional[List[str]] = None,
         evolution: Optional[Any] = None,
+        plan_size: Optional[int] = None,
     ) -> None:
         self._order = list(order) if order else [item[0] for item in PLAN_ORDER]
         self._specs: Dict[str, ExperimentSpec] = {}
         self._evolution = evolution
+        self._plan_size = plan_size
 
     def _evolved_order(self) -> List[str]:
         if self._evolution is not None:
@@ -75,7 +77,7 @@ class ResearchPVPlanner:
     ) -> List[ExperimentSpec]:
         del run_kind
         attempted = set(str(x) for x in view.get("attempted", []))
-        limit = max(1, int(task.budget.candidates))
+        limit = self._plan_size or max(1, int(task.budget.candidates))
         out: List[ExperimentSpec] = []
         index = 1
         for hid in self._evolved_order():

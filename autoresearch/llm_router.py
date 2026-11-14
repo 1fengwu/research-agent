@@ -90,6 +90,7 @@ def cache_key_for_decision(state: Dict[str, Any], summary: Dict[str, Any]) -> st
         "conflicts": summary.get("conflicts"),
         "critical_decision": bool(state.get("critical_decision")),
         "data_anomaly": bool(state.get("data_anomaly")),
+        "pending_candidates": summary.get("pending_candidates", []),
     }
     canonical = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:24]
@@ -212,7 +213,16 @@ def parse_json_content(content: str) -> Any:
     try:
         return json.loads(text)
     except Exception:
-        return None
+        pass
+    decoder = json.JSONDecoder()
+    for index in range(len(text)):
+        if text[index] != "{":
+            continue
+        try:
+            return decoder.raw_decode(text, index)[0]
+        except Exception:
+            continue
+    return None
 
 
 def validate_reply(reply: Any) -> Tuple[bool, str, Dict[str, Any]]:
@@ -315,6 +325,7 @@ def build_compact_summary(state: Dict[str, Any]) -> Dict[str, Any]:
         "active_config": state.get("active_config"),
         "evidence_ids": list(state.get("evidence_ids", [])),
         "last_trial": state.get("last_trial"),
+        "pending_candidates": state.get("pending_candidates", []),
         "conflicts": conflicts,
         "budget": state.get("budget_snapshot"),
     }
@@ -334,7 +345,11 @@ STRUCTURED_REPLY_PROMPT = (
     "You are a research-agent planner. "
     "Reply with a single JSON object only, no markdown fences and no prose. "
     'The object must contain "decision" (string), "evidence_ids" (non-empty list of strings), '
-    '"actions" (non-empty list of objects), and an optional "note" (string).'
+    '"actions" (non-empty list of objects). Use exactly one action. '
+    'Use {"action":"select_candidate","target":"<pending candidate id>"} to choose '
+    'the next experiment, {"action":"continue"} to keep the current order, or '
+    '{"action":"replan"} to recover when planning failed and no candidates are listed. '
+    'Keep the decision brief and cite evidence IDs from the input when available.'
 )
 
 
@@ -394,9 +409,14 @@ class HttpJsonCloudClient:
             raise RuntimeError(f"cloud call failed: {exc}") from exc
         try:
             parsed = json.loads(body)
-            content = str(parsed["choices"][0]["message"]["content"] or "")
+            choice = parsed["choices"][0]
+            content = str(choice["message"]["content"] or "")
             usage = parsed.get("usage") or {}
-            return {"content": content, "usage": usage}
+            return {
+                "content": content,
+                "usage": usage,
+                "finish_reason": str(choice.get("finish_reason") or ""),
+            }
         except Exception as exc:
             raise RuntimeError(f"cloud response not parseable: {exc}") from exc
 
@@ -719,7 +739,12 @@ class ResearchRouter:
                 phase,
                 invalid_reason,
                 tokens=tokens,
-                extra={"trigger": reasons},
+                extra={
+                    "trigger": reasons,
+                    "reply_preview": str(content)[:300],
+                    "finish_reason": str(raw.get("finish_reason") or ""),
+                    "content_length": len(content),
+                },
             )
             return {
                 "escalated": True,
