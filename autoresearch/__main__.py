@@ -43,7 +43,11 @@ def main() -> int:
             data=backend,
             oracle=ResearchOracle(backend, output_dir=args.output_dir),
             planner=ResearchPVPlanner(evolution=evolution_store),
-            router=ResearchRouter(ledger, client=client),
+            router=ResearchRouter(
+                ledger,
+                client=client,
+                cache_path=str(args.output_dir / "cache" / "decision-cache.json"),
+            ),
             ledger=ledger,
             writer=EventWriter(args.output_dir / "runner-events.jsonl"),
             run_id=run_id,
@@ -62,6 +66,7 @@ def main() -> int:
         )
     except Exception as exc:
         summary["seed_audit"] = {"error": str(exc)}
+
     prepared = backend.prepared_split()
     summary["data_hash"] = prepared.meta.get("data_hash") or ""
     summary["split_fingerprint"] = prepared.fingerprint

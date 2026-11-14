@@ -282,10 +282,17 @@ def _render_track(summary: Dict[str, Any]) -> None:
         st.markdown("**预算与状态**")
         st.metric("阶段", summary.get("phase") or "—")
         st.metric("停止原因", str(summary.get("stop_reason") or "—"))
+        st.metric("预算模式", str(budget.get("mode") or summary.get("budget_mode") or "—"))
         st.metric("剩余实验", budget.get("remaining_candidates", "—"))
         st.metric("剩余云调用", budget.get("remaining_cloud_calls", "—"))
         st.metric("剩余 token", budget.get("remaining_cloud_tokens", "—"))
         st.metric("剩余时间（秒）", budget.get("remaining_seconds", "—"))
+        savings = summary.get("token_savings") or {}
+        if savings:
+            st.metric("估算节省 token", savings.get("total_estimated_saved", 0))
+            st.metric("避免云调用", savings.get("cloud_calls_avoided", 0))
+            st.metric("缓存命中", savings.get("cache_hits", 0))
+            st.metric("本地规则", savings.get("local_rule_decisions", 0))
 
     if summary.get("hypotheses"):
         st.markdown("**假设与证据**")
@@ -327,7 +334,7 @@ def _render_review(summary: Dict[str, Any]) -> None:
             )
         )
     else:
-        st.warning("本次运行未执行独立测试（预算不足或部分完成）。")
+        st.warning("本次运行未执行独立测试（数据/裁判不可用或用户取消）。")
     st.markdown(
         "**保留基线/结束研究理由**：`%s`"
         % (locked.get("reason") or "—")

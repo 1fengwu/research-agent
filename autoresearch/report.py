@@ -219,6 +219,9 @@ def summarize_run(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "locked": locked,
         "test_verdict": test_verdict,
         "tested": tested_event is not None,
+        "local_rule_count": _count(events, "research.local_rule"),
+        "cache_hit_count": _count(events, "research.escalation_cached"),
+        "token_savings": dict(completed_summary.get("token_savings") or {}),
         "events": list(events or []),
     }
 
@@ -276,6 +279,31 @@ def render_markdown(summary: Dict[str, Any]) -> str:
     lines.append(f"- 剩余云调用：`{budget.get('remaining_cloud_calls') or 0}`")
     lines.append(f"- 剩余云 token：`{budget.get('remaining_cloud_tokens') or 0}`")
     lines.append(f"- 剩余时间：`{_fmt(budget.get('remaining_seconds'), 3)}` 秒")
+    savings = summary.get("token_savings") or {}
+    if savings:
+        lines.append(
+            f"- 云端实际 token（入账）：`{_fmt(savings.get('cloud_tokens_charged'), 0)}`"
+        )
+        lines.append(
+            f"- 上下文压缩节省：`{_fmt(savings.get('prompt_compression_saved'), 0)}`"
+            "（基线 `%s` → 压缩 `%s`）"
+            % (
+                _fmt(savings.get("prompt_baseline_tokens"), 0),
+                _fmt(savings.get("prompt_compact_tokens"), 0),
+            )
+        )
+        lines.append(
+            f"- 云决策缓存命中：`{savings.get('cache_hits') or 0}` 次，"
+            f"节省 `{_fmt(savings.get('cache_saved_tokens'), 0)}` token"
+        )
+        lines.append(
+            f"- 本地规则决策：`{savings.get('local_rule_decisions') or 0}` 次，"
+            f"节省 `{_fmt(savings.get('local_rule_saved_tokens'), 0)}` token"
+        )
+        lines.append(
+            f"- 避免云调用：`{savings.get('cloud_calls_avoided') or 0}` 次，"
+            f"估算总节省 `{_fmt(savings.get('total_estimated_saved'), 0)}` token"
+        )
     lines.append("")
 
     lines.append("## 4. 假设与实验")
@@ -309,6 +337,8 @@ def render_markdown(summary: Dict[str, Any]) -> str:
     lines.append(f"- 证据驱动修正次数：`{summary.get('revised_count') or 0}`")
     blocked = summary.get("escalation_blocked") or []
     lines.append(f"- 预算/升级拦截次数：`{len(blocked)}`")
+    lines.append(f"- 本地规则决策次数：`{summary.get('local_rule_count') or 0}`")
+    lines.append(f"- 云决策缓存命中：`{summary.get('cache_hit_count') or 0}`")
     for event in blocked:
         lines.append(
             f"  - `{event.get('decision_reason') or ''}`（剩余 token `{((event.get('remaining') or {}).get('remaining_cloud_tokens') or 0)}`）"
@@ -323,7 +353,7 @@ def render_markdown(summary: Dict[str, Any]) -> str:
         lines.append(f"- 锁定 merged_auc：`{_fmt(locked.get('merged_auc'), 6)}`")
         lines.append(f"- 锁定理由：`{locked.get('reason') or '—'}`")
     else:
-        lines.append("- 未找到锁定事件（可能仍在运行或为部分完成）。")
+        lines.append("- 未找到锁定事件（可能仍在运行或在硬限制下中断）。")
     if summary.get("tested"):
         test_verdict = summary.get("test_verdict") or {}
         metric = test_verdict.get("metric") or {}
@@ -335,7 +365,7 @@ def render_markdown(summary: Dict[str, Any]) -> str:
             if metric.get(name) is not None:
                 lines.append(f"- 独立测试 {name}：`{_fmt(metric.get(name))}`")
     else:
-        lines.append("- 未执行独立测试（预算不足或部分完成）。")
+        lines.append("- 未执行独立测试（数据/裁判不可用或用户取消）。")
     lines.append("")
 
     lines.append("## 7. 复现包")

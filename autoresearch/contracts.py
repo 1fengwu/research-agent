@@ -26,6 +26,8 @@ class BudgetSpec:
     wall_seconds: int = 180
     reserve_seconds: int = 60
     reserve_tokens: int = 1200
+    # Soft targets by default; hard_limits=True turns them into stop conditions.
+    hard_limits: bool = False
 
 
 @dataclass(frozen=True)
@@ -116,6 +118,13 @@ def _int(raw: Dict[str, Any], key: str, default: int, minimum: int = 0) -> int:
     return value
 
 
+def _bool(raw: Dict[str, Any], key: str, default: bool = False) -> bool:
+    value = raw.get(key, default)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
 def _float(raw: Dict[str, Any], key: str, default: float) -> float:
     try:
         value = float(raw.get(key, default))
@@ -166,6 +175,7 @@ def load_task_spec(raw: Dict[str, Any]) -> TaskSpec:
             wall_seconds=_int(budget_raw, "wall_seconds", 180, 1),
             reserve_seconds=_int(budget_raw, "reserve_seconds", 60, 0),
             reserve_tokens=_int(budget_raw, "reserve_tokens", 1200, 0),
+            hard_limits=_bool(budget_raw, "hard_limits", False),
         ),
         primary_metric=str(raw.get("primary_metric") or "daily_auc_mean").strip(),
     )

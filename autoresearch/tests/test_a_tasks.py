@@ -378,7 +378,7 @@ class AgentATest(unittest.TestCase):
                 self.assertTrue(str(event.get("decision_reason") or "").strip())
                 self.assertTrue(str(event.get("phase") or "").strip())
 
-    def test_budget_blocks_cloud_call(self) -> None:
+    def test_budget_blocks_cloud_call_but_run_completes(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             task = make_task(folder, budget={"cloud_tokens": 100, "reserve_tokens": 1200})
             client = FakeCloudClient()
@@ -393,7 +393,11 @@ class AgentATest(unittest.TestCase):
             self.assertEqual(client.calls, 0)
             self.assertEqual(ledger.remaining_cloud_calls(), task.budget.cloud_calls)
             self.assertTrue(any(e["type"] == "research.escalation_blocked" for e in events(folder)))
-            self.assertEqual(summary["phase"], "PARTIAL_COMPLETED")
+            self.assertTrue(any(e["type"] == "research.budget_warning" for e in events(folder)))
+            self.assertEqual(summary["budget"]["mode"], "critical")
+            self.assertTrue(summary["tested"])
+            self.assertEqual(summary["phase"], "TESTED")
+            self.assertEqual(summary["stop_reason"], "plan_exhausted")
 
     def test_duplicate_fingerprint_skipped(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
@@ -442,7 +446,7 @@ class AgentATest(unittest.TestCase):
             self.assertTrue(summary["repeated_error_signature"])
             self.assertTrue(any(e["type"] == "research.escalation" for e in events(folder)))
 
-    def test_candidate_budget_stops_loop(self) -> None:
+    def test_candidate_target_does_not_stop_completion(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             task = make_task(folder, budget={"candidates": 2})
             specs = [
@@ -455,8 +459,11 @@ class AgentATest(unittest.TestCase):
                 folder, task, data, FakePlanner(specs), clock=lambda: 0.0
             )
             summary = orchestrator.run()
-            self.assertEqual(len(data.calls), 2)
-            self.assertEqual(summary["stop_reason"], "candidate_budget")
+            self.assertEqual(len(data.calls), 3)
+            self.assertEqual(summary["stop_reason"], "plan_exhausted")
+            self.assertEqual(summary["phase"], "TESTED")
+            self.assertTrue(summary["tested"])
+            self.assertEqual(summary["budget"]["used_candidates"], 3)
 
 
     def test_refuted_candidate_not_locked(self) -> None:
@@ -544,7 +551,7 @@ class AgentATest(unittest.TestCase):
             self.assertTrue(summary2["tested"])
             self.assertEqual(ledger.path.name, "R2.json")
 
-    def test_partial_completed_reason_overrides(self) -> None:
+    def test_budget_shortage_still_finalizes(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             task = make_task(
                 folder,
@@ -556,16 +563,18 @@ class AgentATest(unittest.TestCase):
                 folder, task, data, FakePlanner(specs), clock=lambda: 0.0
             )
             summary = orchestrator.run()
-            self.assertEqual(summary["phase"], "PARTIAL_COMPLETED")
-            self.assertEqual(summary["stop_reason"], "partial_completed")
-            self.assertFalse(summary["tested"])
+            self.assertEqual(summary["phase"], "TESTED")
+            self.assertEqual(summary["stop_reason"], "plan_exhausted")
+            self.assertTrue(summary["tested"])
+            self.assertEqual(summary["budget"]["mode"], "critical")
             self.assertTrue(
                 any(
-                    e["type"] == "research.completed"
-                    and e["decision_reason"] == "stop_reason:partial_completed"
+                    e["type"] == "research.budget_warning"
+                    and "budget_mode:critical" in e["decision_reason"]
                     for e in events(folder)
                 )
             )
+            self.assertTrue(any(e["type"] == "research.tested" for e in events(folder)))
 
     def test_plan_failure_escalates_and_replans(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
@@ -595,15 +604,121 @@ class AgentATest(unittest.TestCase):
             self.assertEqual(data.calls, ["exp-001"])
             self.assertTrue(summary["tested"])
 
-    def test_preflight_reserves_tokens(self) -> None:
+    def _pressure_state(self, folder: str) -> Dict[str, Any]:
+        task = make_task(
+            folder,
+            budget={"cloud_tokens": 100, "reserve_tokens": 1200},
+        )
+        ledger = BudgetGate(task.budget, clock=lambda: 0.0)
+        return {
+            "run_id": "R-local-cache",
+            "phase": "REVISED",
+            "active_config": {"model": "logistic", "feature_set": "base"},
+            "baseline": {"merged_auc": 0.60, "config": {}},
+            "evidence_ids": ["exp-001:window_conflict"],
+            "stall_rounds": 0,
+            "window_conflict": True,
+            "critical_decision": False,
+            "data_anomaly": False,
+            "repeated_error_signature": False,
+            "error_signatures": {},
+            "experiments": [],
+            "attempted": ["exp-001"],
+            "last_trial": {"experiment_id": "exp-001"},
+            "budget_snapshot": ledger.snapshot(),
+            "budget_warnings": [],
+        }
+
+    def test_cloud_decision_cache_reused_across_runs(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
-            gate = BudgetGate(
-                BudgetSpec(cloud_tokens=100, reserve_tokens=80),
+            task = make_task(folder)
+            cache_path = os.path.join(folder, "decision-cache.json")
+            client = FakeCloudClient()
+
+            ledger = BudgetGate(task.budget, clock=lambda: 0.0)
+            router = ResearchRouter(ledger, client=client, cache_path=cache_path)
+            state = self._pressure_state(folder)
+            state["window_conflict"] = True
+            first = router.escalate_if_needed(state)
+            self.assertEqual(first["source"], "cloud")
+            self.assertTrue(first["valid"])
+            self.assertEqual(client.calls, 1)
+            self.assertEqual(router.cache_hits, 0)
+
+            ledger2 = BudgetGate(task.budget, clock=lambda: 0.0)
+            router2 = ResearchRouter(ledger2, client=client, cache_path=cache_path)
+            second = router2.escalate_if_needed(self._pressure_state(folder))
+            self.assertEqual(second["source"], "cache")
+            self.assertTrue(second["valid"])
+            self.assertEqual(client.calls, 1)
+            self.assertEqual(router2.cache_hits, 1)
+            savings = router2.savings_summary()
+            self.assertEqual(savings["cache_hits"], 1)
+            self.assertGreater(savings["cache_saved_tokens"], 0)
+            self.assertGreater(savings["total_estimated_saved"], 0)
+
+    def test_local_rule_avoids_cloud_under_budget_pressure(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            task = make_task(
+                folder,
+                budget={"cloud_tokens": 100, "reserve_tokens": 1200},
+            )
+            client = FakeCloudClient()
+            ledger = BudgetGate(task.budget, clock=lambda: 0.0)
+            router = ResearchRouter(ledger, client=client)
+            outcome = router.escalate_if_needed(self._pressure_state(folder))
+            self.assertEqual(outcome["source"], "local")
+            self.assertTrue(outcome["valid"])
+            self.assertEqual(outcome["reply"]["decision"], "continue_with_next_hypothesis")
+            self.assertEqual(client.calls, 0)
+            self.assertEqual(router.local_rule_decisions, 1)
+            savings = router.savings_summary()
+            self.assertGreater(savings["local_rule_saved_tokens"], 0)
+            self.assertEqual(savings["cloud_calls_avoided"], 1)
+
+    def test_summary_reports_token_savings(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            task = make_task(folder)
+            data = FakeData(
+                {"exp-001": good_result("exp-001")},
+                profile={"data_anomaly": True},
+            )
+            client = FakeCloudClient()
+            orchestrator, ledger, writer, oracle = make_orchestrator(
+                folder,
+                task,
+                data,
+                FakePlanner([spec("exp-001")]),
+                client=client,
                 clock=lambda: 0.0,
             )
-            with self.assertRaises(BudgetBlocked) as context:
-                gate.preflight_cloud(30, 60)
-            self.assertIn("reserve", context.exception.reason)
+            summary = orchestrator.run()
+            savings = summary["token_savings"]
+            self.assertIn("prompt_compression_saved", savings)
+            self.assertIn("cache_hits", savings)
+            self.assertIn("local_rule_decisions", savings)
+            self.assertGreaterEqual(savings["prompt_compression_saved"], 0)
+            self.assertGreaterEqual(savings["cloud_tokens_charged"], 0)
+
+    def test_hard_mode_preflight_reserves_tokens(self) -> None:
+        gate = BudgetGate(
+            BudgetSpec(cloud_tokens=100, reserve_tokens=80),
+            hard=True,
+            clock=lambda: 0.0,
+        )
+        with self.assertRaises(BudgetBlocked) as context:
+            gate.preflight_cloud(30, 60)
+        self.assertIn("reserve", context.exception.reason)
+
+    def test_soft_mode_allows_overrun_to_finish_call(self) -> None:
+        gate = BudgetGate(
+            BudgetSpec(cloud_tokens=100, reserve_tokens=80),
+            clock=lambda: 0.0,
+        )
+        result = gate.preflight_cloud(30, 80, allow_overrun=True)
+        self.assertTrue(result["allowed"])
+        self.assertTrue(result["overrun"])
+        self.assertTrue(result["reserve_breached"])
 
 
 if __name__ == "__main__":

@@ -239,7 +239,10 @@ class ResearchOrchestrator:
             "last_trial": None,
             "escalation_attempts": 0,
             "escalation_valid": 0,
+            "local_rule_decisions": 0,
+            "cache_hits": 0,
             "budget_snapshot": self.ledger.snapshot(),
+            "budget_warnings": [],
         }
 
     def _trial_reason(self, trial: TrialResult) -> str:
@@ -249,6 +252,53 @@ class ResearchOrchestrator:
             f"val1={trial.val1.auc:.4f}/{trial.val1.valid_days}d "
             f"val2={trial.val2.auc:.4f}/{trial.val2.valid_days}d"
         )
+
+    def _budget_warning(
+        self,
+        state: Dict[str, Any],
+        phase: str,
+        warning: str,
+        *,
+        mode: Optional[str] = None,
+    ) -> None:
+        warnings = state.setdefault("budget_warnings", [])
+        if warning not in warnings:
+            warnings.append(warning)
+        self._emit(
+            "research.budget_warning",
+            phase,
+            warning,
+            extra={
+                "mode": mode or self.ledger.budget_mode(),
+                "overrun": self.ledger.overrun(),
+            },
+        )
+
+    def _adaptive_plan_cap(self, specs: List[ExperimentSpec]) -> List[ExperimentSpec]:
+        """Plan smaller as budget pressure rises so later plans cost fewer tokens."""
+        cap = {"economy": 2, "critical": 1, "overrun": 1}.get(
+            self.ledger.budget_mode()
+        )
+        if cap is None:
+            return specs
+        return list(specs[:cap])
+
+    def _apply_escalation_outcome(
+        self,
+        state: Dict[str, Any],
+        outcome: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Count cloud/local/cache decisions separately for cost accounting."""
+        source = str(outcome.get("source") or "cloud")
+        if source == "local":
+            state["local_rule_decisions"] = int(state.get("local_rule_decisions", 0)) + 1
+        elif source == "cache":
+            state["cache_hits"] = int(state.get("cache_hits", 0)) + 1
+        else:
+            state["escalation_attempts"] = int(state.get("escalation_attempts", 0)) + 1
+            if outcome.get("valid"):
+                state["escalation_valid"] = int(state.get("escalation_valid", 0)) + 1
+        return state
 
     def _window_conflict(self, trial: TrialResult, baseline: Dict[str, Any]) -> bool:
         if trial.error:
@@ -410,8 +460,15 @@ class ResearchOrchestrator:
         )
 
         state = self._initial_state(profile, baseline)
+        mode = self.ledger.budget_mode()
+        if mode != "normal":
+            self._budget_warning(state, PHASE_PLANNED, f"budget_mode:{mode}")
         try:
-            planned = self._normalize_specs(self.planner.plan(self.task, self._view(state), "first"))
+            planned = self._adaptive_plan_cap(
+                self._normalize_specs(
+                    self.planner.plan(self.task, self._view(state), "first")
+                )
+            )
         except Exception as exc:
             planned = []
             state["data_anomaly"] = True
@@ -419,10 +476,9 @@ class ResearchOrchestrator:
             state["budget_snapshot"] = self.ledger.snapshot()
             outcome = self.router.escalate_if_needed(state)
             if outcome.get("escalated"):
-                state["escalation_attempts"] = int(state.get("escalation_attempts", 0)) + 1
+                state = self._apply_escalation_outcome(state, outcome)
                 if outcome.get("valid"):
                     state = apply_reply(state, outcome["reply"])
-                    state["escalation_valid"] = int(state.get("escalation_valid", 0)) + 1
                     state["data_anomaly"] = False
                     self._emit(
                         "research.revised",
@@ -431,8 +487,10 @@ class ResearchOrchestrator:
                         extra={"reply": _short(outcome["reply"])},
                     )
                     try:
-                        planned = self._normalize_specs(
-                            self.planner.plan(self.task, self._view(state), "revised")
+                        planned = self._adaptive_plan_cap(
+                            self._normalize_specs(
+                                self.planner.plan(self.task, self._view(state), "revised")
+                            )
                         )
                     except Exception as replan_exc:
                         self._emit(
@@ -472,10 +530,9 @@ class ResearchOrchestrator:
             state["budget_snapshot"] = self.ledger.snapshot()
             outcome = self.router.escalate_if_needed(state)
             if outcome.get("escalated"):
-                state["escalation_attempts"] = int(state.get("escalation_attempts", 0)) + 1
+                state = self._apply_escalation_outcome(state, outcome)
                 if outcome.get("valid"):
                     state = apply_reply(state, outcome["reply"])
-                    state["escalation_valid"] = int(state.get("escalation_valid", 0)) + 1
                     self._emit(
                         "research.revised",
                         PHASE_REVISED,
@@ -484,8 +541,10 @@ class ResearchOrchestrator:
                         extra={"reply": _short(outcome["reply"])},
                     )
                     try:
-                        more = self._normalize_specs(
-                            self.planner.plan(self.task, self._view(state), "revised")
+                        more = self._adaptive_plan_cap(
+                            self._normalize_specs(
+                                self.planner.plan(self.task, self._view(state), "revised")
+                            )
                         )
                         pending = more + pending
                     except Exception as exc:
@@ -589,8 +648,10 @@ class ResearchOrchestrator:
         if stop is None:
             if not pending:
                 stop = "no_experiments" if not state["experiments"] else "plan_exhausted"
+            elif not self.ledger.can_run_experiment():
+                stop = "wall_time_guard"
             else:
-                stop = self.ledger.stop_reason() or "budget_exhausted"
+                stop = self.ledger.stop_reason() or "plan_interrupted"
 
         locked = self._lock_best(state)
         self._emit(
@@ -602,7 +663,15 @@ class ResearchOrchestrator:
 
         tested = False
         test_verdict: Optional[Verdict] = None
-        if self.ledger.can_finalize():
+        finalize = self.ledger.finalize_status()
+        if finalize.get("warning"):
+            self._budget_warning(
+                state,
+                PHASE_LOCKED,
+                finalize["warning"],
+                mode=finalize["mode"],
+            )
+        if finalize["allow"]:
             locked_spec, locked_trial = self._locked_record(state, locked)
             register_lock = getattr(self.oracle, "register_lock", None)
             try:
@@ -647,9 +716,21 @@ class ResearchOrchestrator:
             "escalation_valid": state.get("escalation_valid"),
             "budget": self.ledger.snapshot(),
             "ledger": self.ledger.usage_ledger(),
+            "budget_mode": self.ledger.budget_mode(),
+            "budget_overrun": self.ledger.overrun(),
+            "budget_warnings": list(state.get("budget_warnings", [])),
+            "local_rule_decisions": int(state.get("local_rule_decisions", 0)),
+            "cache_hits": int(state.get("cache_hits", 0)),
+            "token_savings": self.router.savings_summary(),
             "event_path": str(self.writer.path),
             "elapsed_seconds": round(self._clock() - self._started_wall, 3),
         }
+        self._emit(
+            "research.token_savings",
+            final_phase,
+            "token_savings_report",
+            extra={"token_savings": self.router.savings_summary()},
+        )
         self._emit(
             "research.completed",
             final_phase,

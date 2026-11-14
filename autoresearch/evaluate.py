@@ -2,7 +2,7 @@
 
 三臂口径（与《AutoResearch-四人分工执行手册》§5.3 一致）：
 - A 固定顺序本地搜索：无云调用，规则直出；
-- B 贪婪云：每次要选实验都尝试云端，使用同一预算上限；
+- B 贪婪云：每次要选实验都尝试云端，使用同一软预算口径；
 - C 证据触发主臂：本地规则优先，只有结构触发才云端。
 
 默认在没有云环境变量时使用确定性离线云客户端，指标里的 usage 标
@@ -75,6 +75,9 @@ class AlwaysEscalateRouter:
         state["critical_decision"] = True
         return self.delegate.escalate_if_needed(state)
 
+    def savings_summary(self) -> Dict[str, Any]:
+        return self.delegate.savings_summary()
+
 
 class LocalOnlyRouter:
     """A 固定顺序本地搜索：从不调用云，也从不写预算拦截事件。"""
@@ -82,6 +85,22 @@ class LocalOnlyRouter:
     def escalate_if_needed(self, state: Dict[str, Any]) -> Dict[str, Any]:
         del state
         return {"escalated": False, "valid": None, "reasons": [], "tokens": None}
+
+    def savings_summary(self) -> Dict[str, Any]:
+        return {
+            "compared_decisions": 0,
+            "prompt_baseline_tokens": 0,
+            "prompt_compact_tokens": 0,
+            "prompt_compression_saved": 0,
+            "cache_hits": 0,
+            "cache_saved_tokens": 0,
+            "local_rule_decisions": 0,
+            "local_rule_saved_tokens": 0,
+            "cloud_calls_avoided": 0,
+            "total_estimated_saved": 0,
+            "cloud_calls_charged": 0,
+            "cloud_tokens_charged": 0,
+        }
 
 
 def _usage_counts(ledger: Dict[str, Any]) -> Dict[str, Any]:
@@ -113,6 +132,7 @@ def _metrics_row(arm: str, record: Dict[str, Any], price: Optional[float]) -> Di
         if price is not None
         else None
     )
+    savings = summary.get("token_savings") or {}
     return {
         "run_id": summary.get("run_id"),
         "arm": arm,
@@ -128,6 +148,10 @@ def _metrics_row(arm: str, record: Dict[str, Any], price: Optional[float]) -> Di
         "charged_tokens": usage["charged_tokens"],
         "usage_source": usage_source,
         "cost": cost,
+        "tokens_saved": savings.get("total_estimated_saved"),
+        "cache_hits": savings.get("cache_hits", 0),
+        "local_rules": savings.get("local_rule_decisions", 0),
+        "cloud_calls_avoided": savings.get("cloud_calls_avoided", 0),
         "wall_seconds": summary.get("elapsed_seconds"),
     }
 

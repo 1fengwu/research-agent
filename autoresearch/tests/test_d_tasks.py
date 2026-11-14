@@ -40,11 +40,16 @@ class TestDMockEvents(unittest.TestCase):
         self.assertTrue(summary["tested"])
         self.assertEqual(summary["test_verdict"]["verdict"], "supported")
         self.assertEqual(summary["evidence_ids"], ["exp-002:window_drop"])
+        self.assertIn("total_estimated_saved", summary["token_savings"])
+        self.assertGreater(
+            int(summary["token_savings"]["total_estimated_saved"]), 0
+        )
 
-    def test_budget_blocked_visible(self) -> None:
+    def test_budget_blocked_visible_but_run_completes(self) -> None:
         events = report.load_events(MOCK_EVENTS)
         summary = report.summarize_run(report.group_runs(events)[1]["events"])
-        self.assertEqual(summary["phase"], "PARTIAL_COMPLETED")
+        self.assertEqual(summary["phase"], "TESTED")
+        self.assertTrue(summary["tested"])
         self.assertEqual(len(summary["escalation_blocked"]), 1)
         self.assertIn(
             "budget_blocked",
@@ -74,6 +79,7 @@ class TestDReport(unittest.TestCase):
             self.assertIn(section, markdown)
         self.assertIn("R20261114-001", markdown)
         self.assertIn("0.661491", markdown)
+        self.assertIn("上下文压缩节省", markdown)
 
     def test_reproduce_package_contains_expected(self) -> None:
         summary = self._summary()

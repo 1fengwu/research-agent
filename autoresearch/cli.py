@@ -183,7 +183,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     cloud_client = HttpJsonCloudClient()
     if not cloud_client.configured():
         cloud_client = NullCloudClient()
-    router = ResearchRouter(ledger, client=cloud_client)
+    router = ResearchRouter(
+        ledger,
+        client=cloud_client,
+        cache_path=str(Path(args.output_dir) / "cache" / "decision-cache.json"),
+    )
     from .agent_loop import EventWriter, ResearchOrchestrator
 
     with ResearchIterationStore(str(evolution_path)) as evolution_store:

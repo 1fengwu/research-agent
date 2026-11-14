@@ -28,7 +28,7 @@ UNSEEN → PLANNING → PLANNED → EXPERIMENTING → VERIFIED → REVISED → L
                                               ↘ CONVERGED / FAILED / PARTIAL_COMPLETED
 ```
 
-停止条件：候选实验数、云调用次数、云 token、墙钟时间、无新候选、预算不足且不允许升级。
+停止条件：计划耗尽、无新候选、墙钟保护、用户取消、不可恢复错误。预算默认是软目标（normal/economy/critical/overrun）：压力上升只影响路由与 max_tokens，仍会锁定并执行最终测试；`hard_limits=True` 时才恢复“候选/云调用/token/时间触顶即停”。
 
 ## 升级触发（`llm_router`）
 
@@ -46,7 +46,21 @@ UNSEEN → PLANNING → PLANNED → EXPERIMENTING → VERIFIED → REVISED → L
 - `research.run_started / data_profile / baseline / hypothesis_registered`
 - `research.experiment_started / experiment_result / experiment_skipped / experiment_verdict`
 - `research.revised / escalation / escalation_blocked / escalation_failed / escalation_invalid`
+- `research.local_rule / escalation_cached / budget_overrun / token_savings`
 - `research.locked / tested / completed / partial_completed`
+
+## 真正的省 token 策略（已落地）
+
+软预算只解决“别把省 token 变成不交作业”，真正省云端 token 靠下面六类机制，全部有事件和计量：
+
+1. 紧凑上下文：云端只收 `build_compact_summary`（证据编号、当前配置、最近一次 Trial、冲突、预算快照），不打包全量数据/全实验历史；每次决策都按“全上下文基线 vs 实际压缩摘要”记账。
+2. 本地规则优先：`window_conflict` 由 PRD 规则直接决定下一步，`repeated_error_signature`（实验错误）回退基线；economy/critical/overrun 下这些决策不再上云，发 `research.local_rule`。
+3. 云端决策缓存：相同证据/冲突/最近实验状态优先命中 `.arc/cache/decision-cache.json`，命中时 0 token、0 调用，发 `research.escalation_cached`；键排除 run_id 与预算，跨轮次可复用。
+4. 预算感知规划宽度：economy 只保留 2 个新候选，critical/overrun 只保留 1 个，减少后续实验与升级尝试本身的花费。
+5. 分阶段输出上限：finalize 220、关键判断 180、规划/失败诊断 160-180、其余 120-140 token，避免云模型长篇回答。
+6. 无云复现：C 的 `replay` 只读事件与锁，holdout 重跑为 0 云调用（`cloud_calls_replayed=0`）。
+
+每次完成会输出 `token_savings` 汇总：`prompt_compression_saved`、`cache_hits/cache_saved_tokens`、`local_rule_decisions/local_rule_saved_tokens`、`cloud_calls_avoided`、`total_estimated_saved`、`cloud_tokens_charged`。D 的报告与 UI 直接展示这些数；C 的三臂表把这些数换算成“每 10k token 的提升”。
 
 ## 运行量价研究
 
@@ -69,7 +83,7 @@ python -m autoresearch data/demo_panel.csv
 python -m unittest discover -s autoresearch/tests -v
 ```
 
-覆盖：状态机到 TESTED、预算拦截、重复指纹、非法云回包降级、重复失败升级、候选上限。
+覆盖：状态机到 TESTED、预算拦截后仍完成、overrun 允许、重复指纹、非法云回包降级、重复失败升级、候选软目标。
 
 ## B 对接说明
 

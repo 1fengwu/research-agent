@@ -626,6 +626,46 @@
     }
   },
   {
+    "type": "research.local_rule",
+    "phase": "REVISED",
+    "timestamp": "2026-11-14T03:00:03.200Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "local_rule:continue_with_next_hypothesis",
+    "experiment_id": "exp-002",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 3,
+      "remaining_candidates": 1,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 3.2,
+      "remaining_seconds": 176.8
+    },
+    "extra": {"saved_tokens_estimate": 480}
+  },
+  {
+    "type": "research.escalation_cached",
+    "phase": "REVISED",
+    "timestamp": "2026-11-14T03:00:03.250Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "cached:window_conflict",
+    "experiment_id": "exp-003",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 3,
+      "remaining_candidates": 1,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 3.25,
+      "remaining_seconds": 176.75
+    },
+    "extra": {"saved_tokens_estimate": 610}
+  },
+  {
     "type": "research.completed",
     "phase": "TESTED",
     "timestamp": "2026-11-14T03:00:03.340Z",
@@ -655,6 +695,26 @@
         "window_conflict": false,
         "escalation_attempts": 0,
         "escalation_valid": 0,
+        "local_rule_decisions": 1,
+        "cache_hits": 1,
+        "budget_mode": "normal",
+        "budget_overrun": false,
+        "budget_warnings": [],
+        "token_savings": {
+          "compared_decisions": 3,
+          "prompt_baseline_tokens": 4200,
+          "prompt_compact_tokens": 900,
+          "prompt_compression_saved": 3300,
+          "cache_hits": 1,
+          "cache_saved_tokens": 610,
+          "local_rule_decisions": 1,
+          "local_rule_saved_tokens": 480,
+          "cloud_calls_avoided": 2,
+          "total_estimated_saved": 4390,
+          "cloud_calls_charged": 0,
+          "cloud_tokens_charged": 0
+        },
+        "event_path": "autoresearch/mock_events.json",
         "budget": {
           "used_candidates": 4,
           "remaining_candidates": 0,
@@ -792,11 +852,68 @@
     "extra": {"trigger": ["data_anomaly"]}
   },
   {
-    "type": "research.completed",
-    "phase": "PARTIAL_COMPLETED",
-    "timestamp": "2026-11-14T03:10:00.240Z",
+    "type": "research.tested",
+    "phase": "TESTED",
+    "timestamp": "2026-11-14T03:10:00.300Z",
     "run_id": "R20261114-002",
-    "decision_reason": "stop_reason:partial_completed",
+    "decision_reason": "verdict:supported",
+    "experiment_id": "baseline-locked",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 0,
+      "remaining_candidates": 1,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 1,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 300,
+      "elapsed_seconds": 0.3,
+      "remaining_seconds": 39.7
+    },
+    "extra": {
+      "verdict": {
+        "verdict": "supported",
+        "metric": {"auc": 0.661491, "valid_days": 31, "excluded": 14},
+        "checks": ["split_hash_ok", "label_maturity_ok", "no_leakage"],
+        "test": true
+      },
+      "locked_spec": {
+        "experiment_id": "baseline-locked",
+        "hypothesis_id": "LOCKED",
+        "evidence_ids": [],
+        "feature_set": "base",
+        "model": "logistic",
+        "params": {},
+        "missing": "median",
+        "scaling": "standard"
+      }
+    }
+  },
+  {
+    "type": "research.local_rule",
+    "phase": "REVISED",
+    "timestamp": "2026-11-14T03:10:00.280Z",
+    "run_id": "R20261114-002",
+    "decision_reason": "local_rule:fallback_to_baseline",
+    "experiment_id": "exp-001",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 0,
+      "remaining_candidates": 1,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 1,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 300,
+      "elapsed_seconds": 0.28,
+      "remaining_seconds": 39.72
+    },
+    "extra": {"saved_tokens_estimate": 420}
+  },
+  {
+    "type": "research.completed",
+    "phase": "TESTED",
+    "timestamp": "2026-11-14T03:10:00.310Z",
+    "run_id": "R20261114-002",
+    "decision_reason": "stop_reason:no_experiments",
     "experiment_id": "",
     "tokens": {},
     "remaining": {
@@ -806,17 +923,49 @@
       "remaining_cloud_calls": 1,
       "used_cloud_tokens": 0,
       "remaining_cloud_tokens": 300,
-      "elapsed_seconds": 0.24,
-      "remaining_seconds": 39.76
+      "elapsed_seconds": 0.31,
+      "remaining_seconds": 39.69
     },
     "extra": {
       "summary": {
         "run_id": "R20261114-002",
         "task_id": "task-demo-low-budget",
-        "phase": "PARTIAL_COMPLETED",
-        "stop_reason": "partial_completed",
-        "tested": false,
+        "phase": "TESTED",
+        "stop_reason": "no_experiments",
+        "tested": true,
+        "locked": {
+          "name": "baseline",
+          "config": {
+            "experiment_id": "baseline",
+            "hypothesis_id": null,
+            "evidence_ids": [],
+            "feature_set": "base",
+            "model": "logistic",
+            "params": {},
+            "missing": "median",
+            "scaling": "standard"
+          },
+          "merged_auc": 0.661491,
+          "evidence_ids": [],
+          "reason": "no viable candidate (refuted/blocked/window drop); keep baseline"
+        },
+        "test_verdict": {
+          "verdict": "supported",
+          "metric": {"auc": 0.661491, "valid_days": 31, "excluded": 14},
+          "checks": ["split_hash_ok", "label_maturity_ok", "no_leakage"],
+          "test": true
+        },
+        "experiments": [],
         "evidence_ids": [],
+        "stall_rounds": 0,
+        "window_conflict": false,
+        "escalation_attempts": 0,
+        "escalation_valid": 0,
+        "local_rule_decisions": 1,
+        "cache_hits": 0,
+        "budget_mode": "critical",
+        "budget_overrun": false,
+        "budget_warnings": ["budget_mode:critical"],
         "budget": {
           "used_candidates": 0,
           "remaining_candidates": 1,
@@ -824,10 +973,28 @@
           "remaining_cloud_calls": 1,
           "used_cloud_tokens": 0,
           "remaining_cloud_tokens": 300,
-          "elapsed_seconds": 0.24,
-          "remaining_seconds": 39.76
+          "elapsed_seconds": 0.31,
+          "remaining_seconds": 39.69,
+          "mode": "critical",
+          "hard_limits": false,
+          "overrun": false
         },
-        "elapsed_seconds": 0.24
+        "event_path": "autoresearch/mock_events.json",
+        "elapsed_seconds": 0.31,
+        "token_savings": {
+          "compared_decisions": 1,
+          "prompt_baseline_tokens": 3800,
+          "prompt_compact_tokens": 800,
+          "prompt_compression_saved": 3000,
+          "cache_hits": 0,
+          "cache_saved_tokens": 0,
+          "local_rule_decisions": 1,
+          "local_rule_saved_tokens": 420,
+          "cloud_calls_avoided": 1,
+          "total_estimated_saved": 3420,
+          "cloud_calls_charged": 0,
+          "cloud_tokens_charged": 0
+        }
       }
     }
   }

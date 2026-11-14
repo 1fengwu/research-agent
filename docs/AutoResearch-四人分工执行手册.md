@@ -64,7 +64,7 @@ A 是唯一的“大脑调度者”：决定下一步谁做、什么时候可以
 
 ### 3.3 具体要做的事
 
-1. 实现研究状态机：`UNSEEN → PLANNING → PLANNED → EXPERIMENTING → VERIFIED → REVISED → LOCKED → TESTED → PASSED / CONVERGED / FAILED`，以及 `partial_completed` 分支。
+1. 实现研究状态机：`UNSEEN → PLANNING → PLANNED → EXPERIMENTING → VERIFIED → REVISED → LOCKED → TESTED → PASSED / CONVERGED / FAILED`，以及仅在硬限制/不可恢复错误时保留的 `partial_completed` 分支。
 2. 实现主循环：
 
 ```
@@ -80,16 +80,20 @@ load TaskSpec
 → stop and emit summary
 ```
 
-3. 实现停止条件：实验数触顶、云调用触顶、token 触顶、180 秒触顶、无新候选、预算不足且不允许降级、用户取消。
+3. 实现停止条件（软预算下都不是硬停）：候选计划耗尽、无新候选、180 秒保护、用户取消、数据/裁判不可恢复失败；预算只切换到 economy/critical，必要时 overrun 并完成最终测试。
 4. 实现 `llm_router`：
    - `should_escalate(state)`：只有 v5 §7.3 的结构性触发才返回 True；
    - `build_summary(state)`：紧凑摘要，只含证据编号、当前策略、候选、冲突；
    - `call_cloud(summary, max_tokens)`：受 `budget_gate` 约束；
    - `validate_reply(reply)`：必须是可执行 JSON，且引用证据编号；无效就记为失败并回规则路径；
-   - `apply_reply(state, reply)`：改成下一步计划，记录 `escalation` 事件。
-5. 实现预算门：调用前估算输入 token + 预留输出；剩余预算不足就写 `budget_blocked`，不发起调用。
+   - `apply_reply(state, reply)`：改成下一步计划，记录 `escalation` 事件；
+   - `local_rule_decision(state)`：economy/critical/overrun 下 window_conflict → 下一假设、重复实验错误 → 回退基线，0 云调用并写 `research.local_rule`；
+   - `DecisionCache`：`.arc/cache/decision-cache.json` 跨轮次复用有效回包，命中 0 token 并写 `research.escalation_cached`；
+   - `savings_summary()`：汇总压缩节省/缓存/本地规则/避免调用/总节省。
+5. 实现预算门：调用前估算输入 token + 输出上限；预算压力决定 normal/economy/critical/overrun；soft 默认不拦死，economy 计划 2 个、critical/overrun 计划 1 个新候选；软目标不足只跳过本次云调用并写 `budget_blocked`，不终止研究，最终测试总会被执行；`hard_limits=True` 才恢复硬停。
 6. 实现事件写入：阶段、决策原因、实验编号、调用 token、剩余预算全部写 `.arc/runner-events.jsonl`。
 7. 保证重试/回退语义：同一错误签名两次才云诊断；云回包无效则回规则；`rollback` 只由版本链生成新版本。
+8. 输出 token 节省汇总：completed summary 与 `research.token_savings` 事件包含 `prompt_compression_saved / cache_hits / cache_saved_tokens / local_rule_decisions / local_rule_saved_tokens / cloud_calls_avoided / total_estimated_saved / cloud_tokens_charged`。
 
 ### 3.4 消费与提供
 
@@ -113,16 +117,19 @@ load TaskSpec
 ### 3.6 A 自己的测试
 
 - 状态机每步转移有测试；
-- 预算不足时不会发起云调用，事件里有 `budget_blocked`；
+- 预算不足时不发起低价值云调用，事件里有 `budget_blocked`，但研究仍走规则并完成最终测试；
 - 云回包缺证据编号会被拒绝；
 - 同一错误签名第二次才升级；
 - 重复实验指纹会跳过而不是重跑；
+- 相同决策状态二次运行命中缓存，云端调用数不增加，`research.escalation_cached` 事件存在；
+- 预算压力下 window_conflict/重复实验错误走本地规则，云端调用数为 0，`research.local_rule` 事件存在；
+- completed summary 与报告能输出 `token_savings` 各项读数；
 - 事件流里每个阶段都有 `decision_reason`。
 
 ### 3.7 A 的验收标准
 
 - 一个任务能从头跑到报告，且日志里能指出“哪一步证据改变了哪一步配置”；
-- 预算设得太低时能展示拦截；
+- 预算设得太低时能展示拦截 + economy/critical/overrun，且最终结果为 TESTED；
 - D 的 UI 读到的所有状态都来自 A 的事件，而不是 D 自己拼的。
 
 ---
@@ -325,7 +332,7 @@ D 是“脸”：把 A 的事件、C 的指标变成一页能操作的 Streamlit
 
 | 方向 | 内容 |
 |---|---|
-| 消费 A | RunEvent、剩余预算、停止原因 |
+| 消费 A | RunEvent、剩余预算、停止原因、`token_savings` 读数 |
 | 消费 C | metrics、verdicts、复现包校验结果 |
 | 消费 B | 数据画像、日期范围（只读摘要） |
 | 提供评审 | 可操作的评审界面、报告下载、复现包下载 |
@@ -337,13 +344,14 @@ D 是“脸”：把 A 的事件、C 的指标变成一页能操作的 Streamlit
 | 0-1h | 页面三区块布局 + `mock_events.json`；下载按钮先接假文件 |
 | 1-4h | 用 mock 事件驱动时间线和预算面板；H4 时 B 的基线能在页面显示 |
 | 4-6h | 接 A 真实事件流；第一个端到端结果可下载报告；H6 出第一版复现包按钮 |
-| 6-8h | 低预算拦截可视化、停止原因、部分完成标识；H8 页面功能冻结，只做细节 |
+| 6-8h | 低预算拦截可视化、budget_mode/overrun、停止原因；H8 页面功能冻结，只做细节 |
 | 8-10h | 彩排：创建→跟踪→审查→下载；确认 CLI 回放路径可用 |
 
 ### 6.6 D 自己的测试
 
 - mock 事件下时间线顺序正确；
-- 预算不足时页面显示剩余预算与 `budget_blocked`；
+- 预算不足时页面显示剩余预算、`budget_mode` 与 `budget_blocked`，且运行仍 TESTED；
+- 跟踪页/报告显示 `token_savings`：上下文压缩、缓存命中、本地规则、避免云调用与总节省；
 - 报告下载包含复现目录；
 - 页面刷新后状态能从事件文件恢复；
 - 不引入任何会写研究数据的功能。
@@ -385,7 +393,7 @@ D 是“脸”：把 A 的事件、C 的指标变成一页能操作的 Streamlit
 | 0:00-0:35 | 研究问题、数据、预算 | A 讲，B 投数据画像，C 投 pre_gate | A 报任务与预算；B 展示日期范围/字段/缺失；C 展示前置门 3 个数字 |
 | 0:35-1:35 | 被推翻的假设 + 真实云调用或跳过 | A 操作，B 解释实验，C 出 verdict | A 触发或回放 REVISED；B 指出哪组特征导致 val2 下滑；C 展示证据编号和拦截记录 |
 | 1:35-2:25 | 独立测试与成本对照 | C 讲，D 投界面 | C 解释三臂表；D 打开审查结论页展示对比和下载 |
-| 2:25-3:00 | 复现包 + 低预算降级 | D 操作，C 复核 | D 下载复现包并演示 `budget_blocked`；C 跑一条 `replay` 命令 |
+| 2:25-3:00 | 复现包 + 低预算降级 | D 操作，C 复核 | D 下载复现包并演示低预算 `budget_blocked` 后仍 TESTED；C 跑一条 `replay` 命令 |
 
 若现场断网/UI 异常：D 明确说“现在切 CLI 回放路径”，A 继续用本地规则路径跑；不能假装是实时云调用。
 
@@ -399,7 +407,8 @@ D 是“脸”：把 A 的事件、C 的指标变成一页能操作的 Streamlit
 | `experiments/*.json`（TrialResult） | B | ☐ |
 | `verdicts.json` + oracle 日志 | C | ☐ |
 | `.arc/runner-events.jsonl` + `token_ledger.json` | A | ☐ |
-| `metrics.csv / metrics.json`（三臂） | C | ☐ |
+| `metrics.csv / metrics.json`（三臂，含每 10k token 提升） | C | ☐ |
+| `research.token_savings` 事件与 summary 字段 | A（D 在报告展示） | ☐ |
 | `report/final.md` | D（数据来自 A/C） | ☐ |
 | 复现包 zip + `replay` 输出 | D（内容来自 C） | ☐ |
 | requirements lock + 离线 wheel | B/C 协同 | ☐ |
