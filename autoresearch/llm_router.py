@@ -144,6 +144,14 @@ def apply_reply(state: Dict[str, Any], reply: Dict[str, Any]) -> Dict[str, Any]:
     return updated
 
 
+STRUCTURED_REPLY_PROMPT = (
+    "You are a research-agent planner. "
+    "Reply with a single JSON object only, no markdown fences and no prose. "
+    'The object must contain "decision" (string), "evidence_ids" (non-empty list of strings), '
+    '"actions" (non-empty list of objects), and an optional "note" (string).'
+)
+
+
 class HttpJsonCloudClient:
     """Zero-dependency OpenAI-compatible client using the standard library."""
 
@@ -177,7 +185,10 @@ class HttpJsonCloudClient:
         url = f"{self.base_url}/chat/completions"
         payload = {
             "model": self.model,
-            "messages": [{"role": "user", "content": json.dumps(summary, ensure_ascii=False)}],
+            "messages": [
+                {"role": "system", "content": STRUCTURED_REPLY_PROMPT},
+                {"role": "user", "content": json.dumps(summary, ensure_ascii=False)},
+            ],
             "max_tokens": int(max_tokens),
         }
         data = json.dumps(payload).encode("utf-8")
