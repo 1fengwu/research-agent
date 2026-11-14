@@ -226,6 +226,62 @@ def summarize_run(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def token_usage_series(summary: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """从一次运行的事件流中提取 token 动态曲线数据。"""
+    rows: List[Dict[str, Any]] = []
+    for seq, event in enumerate(summary.get("events") or []):
+        remaining = event.get("remaining")
+        tokens = event.get("tokens")
+        remaining = remaining if isinstance(remaining, dict) else {}
+        tokens = tokens if isinstance(tokens, dict) else {}
+        rows.append(
+            {
+                "seq": int(seq),
+                "event": str(event.get("type") or ""),
+                "used_cloud_tokens": int(remaining.get("used_cloud_tokens") or 0),
+                "remaining_cloud_tokens": int(remaining.get("remaining_cloud_tokens") or 0),
+                "input_tokens": int(tokens.get("input") or 0),
+                "output_tokens": int(tokens.get("output") or 0),
+                "elapsed_seconds": round(float(remaining.get("elapsed_seconds") or 0.0), 3),
+            }
+        )
+    return rows
+
+
+def run_token_comparison(runs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """把多轮运行聚合成进化前后的 token 使用对比。"""
+    rows: List[Dict[str, Any]] = []
+    for order, run in enumerate(runs, start=1):
+        events = run.get("events") or []
+        summary = summarize_run(events)
+        last_remaining: Dict[str, Any] = {}
+        tokens_total = 0
+        cloud_calls = 0
+        for event in reversed(events):
+            if not last_remaining:
+                remaining = event.get("remaining")
+                if isinstance(remaining, dict):
+                    last_remaining = remaining
+            tokens = event.get("tokens")
+            if isinstance(tokens, dict):
+                tokens_total += int(tokens.get("input") or 0) + int(tokens.get("output") or 0)
+                cloud_calls += 1
+        rows.append(
+            {
+                "label": "进化前（第 1 轮）" if order == 1 else "进化后（第 %d 轮）" % order,
+                "run_id": str(summary.get("run_id") or run.get("run_id") or order),
+                "phase": str(summary.get("phase") or ""),
+                "used_cloud_tokens": int(last_remaining.get("used_cloud_tokens") or tokens_total),
+                "cloud_calls": int(last_remaining.get("used_cloud_calls") or cloud_calls),
+                "candidates": int(last_remaining.get("used_candidates") or 0),
+                "elapsed_seconds": round(float(last_remaining.get("elapsed_seconds") or 0.0), 3),
+                "tested": bool(summary.get("tested")),
+                "stop_reason": str(summary.get("stop_reason") or ""),
+            }
+        )
+    return rows
+
+
 def _spec_label(spec: Dict[str, Any]) -> str:
     if not spec:
         return ""

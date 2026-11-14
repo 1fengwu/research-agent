@@ -1,0 +1,61 @@
+{
+  "schema_version": "autoresearch-metrics-v1",
+  "task_id": "task-roadshow-mock",
+  "data_path": "data/demo_panel.csv",
+  "cloud": false,
+  "source": "mock",
+  "completion_rate": 1.0,
+  "arms": [
+    {
+      "run_id": "R-A-20261114-001",
+      "arm": "A",
+      "phase": "TESTED",
+      "completion": 1.0,
+      "test_auc": 0.6820,
+      "locked": "exp-004",
+      "stop_reason": "plan_exhausted",
+      "candidates": 4,
+      "cloud_calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "charged_tokens": 0,
+      "usage_source": "none",
+      "cost": null,
+      "wall_seconds": 42.5
+    },
+    {
+      "run_id": "R-B-20261114-002",
+      "arm": "B",
+      "phase": "TESTED",
+      "completion": 1.0,
+      "test_auc": 0.6240,
+      "locked": "baseline",
+      "stop_reason": "cloud_call_budget",
+      "candidates": 2,
+      "cloud_calls": 3,
+      "input_tokens": 1240,
+      "output_tokens": 560,
+      "charged_tokens": 1800,
+      "usage_source": "offline_simulated",
+      "cost": null,
+      "wall_seconds": 61.2
+    },
+    {
+      "run_id": "R-C-20261114-003",
+      "arm": "C",
+      "phase": "TESTED",
+      "completion": 1.0,
+      "test_auc": 0.6842,
+      "locked": "exp-004",
+      "stop_reason": "plan_exhausted",
+      "candidates": 4,
+      "cloud_calls": 1,
+      "input_tokens": 420,
+      "output_tokens": 220,
+      "charged_tokens": 640,
+      "usage_source": "offline_simulated",
+      "cost": null,
+      "wall_seconds": 47.8
+    }
+  ]
+}
