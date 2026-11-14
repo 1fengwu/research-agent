@@ -19,8 +19,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import streamlit as st
 
-from . import report as report_mod
-from .contracts import as_jsonable, load_task_spec
+from autoresearch import report as report_mod
+from autoresearch.contracts import as_jsonable, load_task_spec
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 APP_DIR = Path(__file__).resolve().parent
