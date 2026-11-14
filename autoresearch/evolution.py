@@ -30,6 +30,10 @@ AXIS_FOR_HYPOTHESIS = {
     "tree_shallow": "model",
     "constant": "missing",
     "robust": "scaling",
+    "momentum": "features",
+    "cross": "features",
+    "gradient_boost": "model",
+    "random_forest": "model",
 }
 
 RESEARCH_SPEC = DomainSpec(
@@ -45,6 +49,8 @@ RESEARCH_SPEC = DomainSpec(
                 Hypothesis("volume", "+volume"),
                 Hypothesis("volatility_volume", "+volatility_volume"),
                 Hypothesis("base_features", "固定基线特征"),
+                Hypothesis("momentum", "+momentum"),
+                Hypothesis("cross", "+cross"),
             ],
             default="volatility",
         ),
@@ -54,6 +60,8 @@ RESEARCH_SPEC = DomainSpec(
             [
                 Hypothesis("logistic", "LogisticRegression"),
                 Hypothesis("tree_shallow", "浅层决策树"),
+                Hypothesis("gradient_boost", "梯度提升树"),
+                Hypothesis("random_forest", "随机森林"),
             ],
             default="logistic",
         ),

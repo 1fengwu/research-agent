@@ -18,13 +18,15 @@ from autoresearch.contracts import (
     load_task_spec,
 )
 from autoresearch.data import (
+    FEATURE_GROUPS,
+    add_features,
     canonical_panel_hash,
     compute_labels,
     make_split,
     read_panel,
     split_document,
 )
-from autoresearch.experiment import ResearchBackend
+from autoresearch.experiment import ResearchBackend, run_experiment
 from autoresearch.llm_router import NullCloudClient, ResearchRouter
 from autoresearch.oracle import ResearchOracle
 from autoresearch.research_pv import ResearchPVPlanner
@@ -227,6 +229,57 @@ class TestBEndToEnd(unittest.TestCase):
             self.assertEqual(summary["phase"], "TESTED")
             self.assertEqual(len(summary["experiments"]), 1)
             self.assertTrue(summary["budget"]["used_candidates"] >= 1)
+
+
+class TestBTrustEnhancements(unittest.TestCase):
+    def test_momentum_and_cross_features_available(self) -> None:
+        panel = read_panel(DEMO_CSV)
+        labelled = compute_labels(panel, horizon=5)
+        for name in ("+momentum", "+cross"):
+            frame = add_features(labelled, name)
+            self.assertTrue(set(FEATURE_GROUPS[name]) <= set(frame.columns), name)
+
+    def test_gradient_boost_and_random_forest_run_with_trust_metrics(self) -> None:
+        panel = read_panel(DEMO_CSV)
+        labelled = compute_labels(panel, horizon=5)
+        split = make_split(
+            labelled,
+            train_ratio=0.6,
+            val_windows=2,
+            test_ratio=0.2,
+            gap_days=5,
+            seed=42,
+            data_hash=canonical_panel_hash(panel),
+            split_id="trust-test",
+        )
+        cases = (
+            (
+                "gradient_boost",
+                {"max_iter": 50, "learning_rate": 0.05, "max_depth": 3, "min_samples_leaf": 20},
+            ),
+            (
+                "random_forest",
+                {"n_estimators": 50, "max_depth": 5, "min_samples_leaf": 20},
+            ),
+        )
+        for model, params in cases:
+            raw = run_experiment(
+                {
+                    "experiment_id": f"exp-{model}",
+                    "hypothesis_id": model,
+                    "feature_set": "base",
+                    "model": model,
+                    "params": params,
+                    "missing": "median",
+                    "scaling": "standard",
+                },
+                split,
+                seed=42,
+            )
+            self.assertIsNone(raw.get("error"))
+            self.assertIn("spearman", raw["val1"])
+            self.assertIn("brier", raw["val1"])
+            self.assertIn("pr_auc", raw["val1"])
 
 
 if __name__ == "__main__":

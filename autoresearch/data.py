@@ -44,6 +44,8 @@ FEATURE_GROUPS = {
         "volume_ratio",
         "volume_change",
     ),
+    "+momentum": ("r5", "r20", "r10", "r60", "ma_dist5", "ma_dist20"),
+    "+cross": ("r5", "r20", "x_rank_r5", "x_rank_r20", "x_rank_volume"),
 }
 
 
@@ -373,11 +375,22 @@ def add_features(df: pd.DataFrame, feature_set: str = "base") -> pd.DataFrame:
 
     out["r1"] = grouped["close"].transform(lambda s: s.pct_change(1))
     out["r5"] = grouped["close"].transform(lambda s: s.pct_change(5))
+    out["r10"] = grouped["close"].transform(lambda s: s.pct_change(10))
     out["r20"] = grouped["close"].transform(lambda s: s.pct_change(20))
+    out["r60"] = grouped["close"].transform(lambda s: s.pct_change(60))
+    out["ma_dist5"] = (
+        out["close"] / grouped["close"].transform(lambda s: s.rolling(5).mean()) - 1.0
+    )
+    out["ma_dist20"] = (
+        out["close"] / grouped["close"].transform(lambda s: s.rolling(20).mean()) - 1.0
+    )
     out["hist_volatility"] = grouped["r1"].transform(lambda s: s.rolling(20).std())
     out["vol_ratio"] = (
         out["hist_volatility"] / grouped["r1"].transform(lambda s: s.rolling(60).std())
     )
+    out["x_rank_r5"] = out.groupby("date")["r5"].rank(pct=True)
+    out["x_rank_r20"] = out.groupby("date")["r20"].rank(pct=True)
+    out["x_rank_volume"] = out.groupby("date")["volume"].rank(pct=True)
     out["volume_ma20"] = grouped["volume"].transform(
         lambda s: s.rolling(20).mean().shift(1)
     )

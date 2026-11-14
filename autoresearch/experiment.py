@@ -11,13 +11,22 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+# 受限沙箱/现场环境不能创建线程池管道；单线程也让模型结果更可复现。
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+
 import pandas as pd
+from scipy.stats import spearmanr
+from sklearn.ensemble import (
+    HistGradientBoostingClassifier,
+    RandomForestClassifier,
+)
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
 from sklearn.preprocessing import RobustScaler, StandardScaler
 from sklearn.tree import DecisionTreeClassifier
 
@@ -46,7 +55,7 @@ BASELINE_SPEC: Dict[str, Any] = {
     "scaling": "standard",
 }
 
-ALLOWED_MODELS = ("logistic", "tree_shallow")
+ALLOWED_MODELS = ("logistic", "tree_shallow", "gradient_boost", "random_forest")
 ALLOWED_MISSING = ("drop", "median", "constant")
 ALLOWED_SCALING = ("none", "standard", "robust")
 
@@ -205,6 +214,26 @@ def _fit_model(
         }
         tree_params.update(params)
         model = DecisionTreeClassifier(**tree_params)
+    elif model_name == "gradient_boost":
+        gbm_params = {
+            "max_iter": 200,
+            "learning_rate": 0.05,
+            "max_depth": 3,
+            "min_samples_leaf": 20,
+            "random_state": seed,
+        }
+        gbm_params.update(params)
+        model = HistGradientBoostingClassifier(**gbm_params)
+    elif model_name == "random_forest":
+        forest_params = {
+            "n_estimators": 200,
+            "max_depth": 5,
+            "min_samples_leaf": 20,
+            "n_jobs": 1,
+            "random_state": seed,
+        }
+        forest_params.update(params)
+        model = RandomForestClassifier(**forest_params)
     else:  # pragma: no cover - normalize_spec 已拦截
         raise ValueError("不支持模型 %s" % model_name)
     model.fit(x_train, y_train)
@@ -258,12 +287,21 @@ def _score_window(
     include_daily: bool = False,
 ) -> Dict[str, Any]:
     proba = model.predict_proba(x_eval)[:, 1]
-    return daily_auc(
+    result = daily_auc(
         frame["label"],
         proba,
         frame["date"],
         include_daily=include_daily,
     )
+    labels = frame["label"].to_numpy(dtype="float64")
+    corr = float(spearmanr(labels, proba).statistic)
+    result["spearman"] = round(corr, 6) if math.isfinite(corr) else None
+    result["brier"] = round(float(brier_score_loss(labels, proba)), 6)
+    if len(set(labels)) >= 2:
+        result["pr_auc"] = round(float(average_precision_score(labels, proba)), 6)
+    else:
+        result["pr_auc"] = None
+    return result
 
 
 def _run_segments(

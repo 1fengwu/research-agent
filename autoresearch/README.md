@@ -165,3 +165,9 @@ python -m autoresearch.cli run --task .arc/task.json \
 ```bash
 python -m unittest autoresearch.tests.test_evolution_tasks -v
 ```
+
+## 增强预测可信度
+
+- 特征新增 `+momentum`（`r10 / r60 / ma_dist5 / ma_dist20`）和 `+cross`（同日横截面排名 `x_rank_r5 / x_rank_r20 / x_rank_volume`）；
+- 模型新增 `gradient_boost`（`HistGradientBoostingClassifier`）和 `random_forest`（`RandomForestClassifier`）；
+- holdout 判决的 `metric` 额外输出 `spearman`、`brier`、`pr_auc`，用于检验排序能力、概率校准和正例排序质量。

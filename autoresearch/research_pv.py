@@ -20,6 +20,10 @@ PLAN_ORDER: List[Tuple[str, str, str, Dict[str, Any], str, str]] = [
     ("tree_shallow", "base", "tree_shallow", {"max_depth": 5, "min_samples_leaf": 20}, "median", "standard"),
     ("constant", "base", "logistic", {}, "constant", "standard"),
     ("robust", "base", "logistic", {}, "median", "robust"),
+    ("momentum", "+momentum", "logistic", {}, "median", "standard"),
+    ("cross", "+cross", "logistic", {}, "median", "standard"),
+    ("gradient_boost", "base", "gradient_boost", {"max_iter": 200, "learning_rate": 0.05, "max_depth": 3, "min_samples_leaf": 20}, "median", "standard"),
+    ("random_forest", "base", "random_forest", {"n_estimators": 200, "max_depth": 5, "min_samples_leaf": 20}, "median", "standard"),
 ]
 
 
