@@ -26,6 +26,7 @@ from autoresearch.data import (
 )
 from autoresearch.experiment import ResearchBackend
 from autoresearch.llm_router import NullCloudClient, ResearchRouter
+from autoresearch.oracle import ResearchOracle
 from autoresearch.research_pv import ResearchPVPlanner
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -183,6 +184,26 @@ class TestBPlanner(unittest.TestCase):
 
 
 class TestBEndToEnd(unittest.TestCase):
+    def test_real_oracle_only_scores_locked_holdout_once(self) -> None:
+        backend = ResearchBackend(make_task())
+        oracle = ResearchOracle(backend)
+        spec = dict(backend.baseline(backend.task)["config"], experiment_id="baseline")
+        request = {
+            "run_id": "test-run",
+            "experiment_id": "baseline",
+            "locked_config": {"spec": spec, "trial": {"experiment_id": "baseline"}},
+            "test": True,
+        }
+        self.assertEqual(oracle.judge(**request).verdict, "blocked")
+        oracle.register_lock("test-run", spec)
+        spec["scaling"] = "none"
+        self.assertEqual(oracle.judge(**request).verdict, "blocked")
+        spec["scaling"] = "standard"
+        result = oracle.judge(**request)
+        self.assertGreater(result.metric["valid_days"], 0)
+        self.assertTrue(result.artifacts_hash.startswith("sha256:"))
+        self.assertEqual(oracle.judge(**request).verdict, "blocked")
+
     def test_a_orchestrator_runs_with_real_backend(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             task = make_task(candidates=1)

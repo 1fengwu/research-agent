@@ -30,6 +30,7 @@ from .data import (
     canonical_panel_hash,
     compute_labels,
     feature_fingerprint,
+    file_sha256,
     make_split,
     read_panel,
 )
@@ -139,12 +140,15 @@ def daily_auc(
     labels: Sequence[float],
     scores: Sequence[float],
     dates: Sequence[Any],
+    *,
+    include_daily: bool = False,
 ) -> Dict[str, Any]:
     """逐交易日 AUC，再对两类都出现的有效日等权平均。"""
     frame = pd.DataFrame(
         {"date": pd.to_datetime(list(dates)), "label": list(labels), "score": list(scores)}
     ).dropna()
     aucs: List[float] = []
+    daily_aucs: List[Dict[str, Any]] = []
     invalid_days = 0
     excluded_rows = 0
     for _, day in frame.groupby("date", sort=True):
@@ -155,15 +159,24 @@ def daily_auc(
         value = float(roc_auc_score(day["label"], day["score"]))
         if math.isfinite(value):
             aucs.append(value)
+            daily_aucs.append(
+                {
+                    "date": str(day["date"].iloc[0].date()),
+                    "auc": round(float(value), 6),
+                }
+            )
         else:
             invalid_days += 1
             excluded_rows += int(len(day))
-    return {
+    result = {
         "auc": round(float(sum(aucs) / len(aucs)), 6) if aucs else None,
         "valid_days": len(aucs),
         "excluded_days": invalid_days,
         "excluded": excluded_rows,
     }
+    if include_daily:
+        result["daily"] = daily_aucs
+    return result
 
 
 def _fit_model(
@@ -237,9 +250,20 @@ def _preprocess(
     return x_train, y_train, transformed_evals
 
 
-def _score_window(model, x_eval: Any, frame: pd.DataFrame) -> Dict[str, Any]:
+def _score_window(
+    model,
+    x_eval: Any,
+    frame: pd.DataFrame,
+    *,
+    include_daily: bool = False,
+) -> Dict[str, Any]:
     proba = model.predict_proba(x_eval)[:, 1]
-    return daily_auc(frame["label"], proba, frame["date"])
+    return daily_auc(
+        frame["label"],
+        proba,
+        frame["date"],
+        include_daily=include_daily,
+    )
 
 
 def _run_segments(
@@ -247,6 +271,8 @@ def _run_segments(
     labelled: pd.DataFrame,
     eval_names: Sequence[str],
     seed: int,
+    *,
+    include_daily: bool = False,
 ):
     train = labelled[labelled["split"] == "train"].dropna(subset=["label"]).copy()
     eval_frames = [
@@ -264,7 +290,12 @@ def _run_segments(
     )
     model = _fit_model(x_train, y_train, spec, seed)
     results = {
-        name: _score_window(model, x_eval, frame)
+        name: _score_window(
+            model,
+            x_eval,
+            frame,
+            include_daily=include_daily,
+        )
         for (name, (x_eval, frame)) in zip(eval_names, transformed)
     }
     return results, model
@@ -294,6 +325,7 @@ def run_experiment(
     split: SplitResult,
     *,
     seed: int = 42,
+    include_daily: bool = False,
 ) -> Dict[str, Any]:
     """执行一个候选实验并输出两窗 TrialResult。"""
     started = time.perf_counter()
@@ -309,7 +341,13 @@ def run_experiment(
 
     try:
         labelled = add_features(split.frame, normalized["feature_set"])
-        results, _model = _run_segments(normalized, labelled, ("val1", "val2"), seed)
+        results, _model = _run_segments(
+            normalized,
+            labelled,
+            ("val1", "val2"),
+            seed,
+            include_daily=include_daily,
+        )
         out["val1"] = results["val1"]
         out["val2"] = results["val2"]
         aucs = [out["val1"]["auc"], out["val2"]["auc"]]
@@ -388,20 +426,21 @@ class ResearchBackend:
 
     def __init__(self, task: TaskSpec) -> None:
         self.task = task
-        self._task_key: Optional[Tuple[str, str, int]] = None
+        self._prepared_task: Optional[TaskSpec] = None
         self._panel = None
         self._split: Optional[SplitResult] = None
         self._baseline: Optional[Dict[str, Any]] = None
 
     def _prepare(self, task: TaskSpec):
-        key = (task.task_id, str(task.data_path), int(task.seed))
-        if key != self._task_key or self._split is None:
+        if task != self._prepared_task or self._split is None:
             data_path = Path(task.data_path)
             if not data_path.is_absolute():
                 data_path = Path(__file__).resolve().parents[1] / data_path
             panel = read_panel(data_path)
+            data_hash = canonical_panel_hash(panel)
+            if task.data_hash and task.data_hash not in (data_hash, file_sha256(data_path)):
+                raise ValueError("TaskSpec.data_hash does not match the input data")
             labelled = compute_labels(panel, horizon=task.label_horizon)
-            data_hash = task.data_hash or canonical_panel_hash(panel)
             split = make_split(
                 labelled,
                 train_ratio=task.split.train,
@@ -409,13 +448,18 @@ class ResearchBackend:
                 test_ratio=task.split.test,
                 gap_days=task.split.gap_days,
                 seed=task.seed,
-                data_hash=data_hash,
+                data_hash=task.data_hash or data_hash,
                 split_id=task.task_id,
             )
-            self._task_key = key
+            self._prepared_task = task
             self._panel = panel
             self._split = split
+            self._baseline = None
         return self._panel, self._split
+
+    def prepared_split(self) -> SplitResult:
+        """Share the run's frozen split with the scoring component."""
+        return self._prepare(self.task)[1]
 
     def describe_data(self, task: TaskSpec) -> Dict[str, Any]:
         panel, _split = self._prepare(task)
@@ -434,6 +478,8 @@ class ResearchBackend:
 
     def baseline(self, task: TaskSpec) -> Dict[str, Any]:
         _panel, split = self._prepare(task)
+        if self._baseline is not None:
+            return self._baseline
         trial = run_experiment(baseline_spec("baseline"), split, seed=task.seed)
         result = {
             "merged_auc": float(trial["merged_auc"] if trial["merged_auc"] is not None else 0.0),

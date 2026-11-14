@@ -48,22 +48,18 @@ UNSEEN → PLANNING → PLANNED → EXPERIMENTING → VERIFIED → REVISED → L
 - `research.revised / escalation / escalation_blocked / escalation_failed / escalation_invalid`
 - `research.locked / tested / completed / partial_completed`
 
-## B/C/D 怎么对接
+## 运行量价研究
 
-```python
-from autoresearch.ports import DataPort, OraclePort, PlannerPort
-from autoresearch.agent_loop import EventWriter, ResearchOrchestrator
-from autoresearch.budget_gate import BudgetGate
-from autoresearch.llm_router import ResearchRouter, HttpJsonCloudClient
+在仓库根目录使用 Python 安装依赖并运行离线演示。
 
-ledger = BudgetGate(task.budget)
-router = ResearchRouter(ledger, client=HttpJsonCloudClient())  # 或 NullCloudClient 离线
-orchestrator = ResearchOrchestrator(task, data=DataPort(), oracle=OraclePort(),
-                                    planner=PlannerPort(), router=router,
-                                    ledger=ledger, writer=EventWriter(),
-                                    run_ledger_dir=".arc/ledgers")
-summary = orchestrator.run()
+```bash
+python -m pip install -r requirements.txt
+python -m autoresearch data/demo_panel.csv
 ```
+
+命令使用真实数据后端、规划器和裁判。它在标准输出返回 JSON 摘要，独立测试指标位于 `test_verdict.metric`，流程未完成时返回非零退出码。默认把事件和预算账本写入 `.arc`，可用 `--output-dir` 指定输出目录。
+
+如需启用云模型，先设置 `ARC_LLM_BASE_URL`（或 `OPENAI_BASE_URL`）、`ARC_LLM_API_KEY` 和 `ARC_LLM_MODEL`，再添加 `--cloud`。
 
 每次 `run()` 会先把 ledger 重置为 `.arc/ledgers/<run_id>.json`，R2 不会继承 R1 的预算；事件流用 `run_id` 区分多轮运行。
 
@@ -87,4 +83,25 @@ python -m unittest discover -s autoresearch/tests -v
 ```bash
 python -m autoresearch.demo_data
 python -m unittest autoresearch.tests.test_b_tasks -v
+```
+
+## C：评测与复现
+
+角色 C 的交付模块：
+
+- `pre_gate.py`：前置门，固定基线 + 3 候选，两窗配对 bootstrap 95% CI，输出 `.arc/pre_gate.json`；
+- `oracle.py`：holdout 唯一裁判，锁定前拒绝测试、锁定后只测一次，并重跑验证窗拒绝伪造提升；
+- `evaluate.py`：A/B/C 三臂对照，输出 `.arc/eval/metrics.csv` 与 `metrics.json`；
+- `replay.py`：无云复现，重跑一次 holdout 并与原记录对账，输出 `.arc/repro/<run_id>/summary.json`。
+
+```bash
+python -m autoresearch.pre_gate --data data/demo_panel.csv --out .arc
+python -m autoresearch.evaluate --data data/demo_panel.csv --out .arc/eval
+python -m autoresearch.replay --run-id <run_id> --output-dir .arc
+```
+
+默认离线可复现；`evaluate.py` 加 `--cloud` 且配置 `ARC_LLM_BASE_URL/ARC_LLM_API_KEY/ARC_LLM_MODEL` 时才使用真实云。
+
+```bash
+python -m unittest autoresearch.tests.test_c_tasks -v
 ```

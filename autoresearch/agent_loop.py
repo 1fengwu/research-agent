@@ -604,15 +604,20 @@ class ResearchOrchestrator:
         test_verdict: Optional[Verdict] = None
         if self.ledger.can_finalize():
             locked_spec, locked_trial = self._locked_record(state, locked)
-            test_verdict = self._judge(
-                locked_spec,
-                locked_trial,
-                test=True,
-            )
-            tested = True
+            register_lock = getattr(self.oracle, "register_lock", None)
+            try:
+                if register_lock is not None:
+                    register_lock(self.run_id, as_jsonable(locked_spec))
+                test_verdict = self._judge(locked_spec, locked_trial, test=True)
+            except Exception as exc:
+                test_verdict = Verdict("blocked", {"error": str(exc)}, test=True)
+            tested = test_verdict.verdict not in {"blocked", "partial_completed"}
+            final_phase = PHASE_TESTED if tested else PHASE_FAILED
+            if not tested:
+                stop = "holdout_failed"
             self._emit(
-                "research.tested",
-                PHASE_TESTED,
+                "research.tested" if tested else "research.test_failed",
+                final_phase,
                 f"verdict:{test_verdict.verdict}",
                 experiment_id=locked_spec.experiment_id,
                 extra={
@@ -620,7 +625,6 @@ class ResearchOrchestrator:
                     "locked_spec": _short(as_jsonable(locked_spec)),
                 },
             )
-            final_phase = PHASE_TESTED
         else:
             final_phase = PHASE_PARTIAL
             stop = "partial_completed"

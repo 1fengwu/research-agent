@@ -1,0 +1,59 @@
+{
+  "task": {
+    "task_id": "task-valid",
+    "data_path": "data/demo_panel.csv",
+    "data_hash": "sha256:abcdef",
+    "label_horizon": 5,
+    "split": {"train": 0.6, "val_windows": 2, "test": 0.2, "gap_days": 5},
+    "seed": 42,
+    "budget": {
+      "candidates": 4,
+      "cloud_calls": 3,
+      "cloud_tokens": 6000,
+      "wall_seconds": 180,
+      "reserve_seconds": 60,
+      "reserve_tokens": 1200
+    },
+    "primary_metric": "daily_auc_mean"
+  },
+  "experiment": {
+    "experiment_id": "exp-001",
+    "hypothesis_id": "volatility",
+    "feature_set": "+volatility",
+    "model": "logistic",
+    "evidence_ids": ["E1"],
+    "params": {"C": 1.0},
+    "missing": "median",
+    "scaling": "standard",
+    "fingerprint": ""
+  },
+  "trial": {
+    "experiment_id": "exp-001",
+    "val1": {"auc": 0.62, "valid_days": 100, "excluded": 20},
+    "val2": {"auc": 0.64, "valid_days": 100, "excluded": 20},
+    "missing_rates": {"hist_volatility": 0.01},
+    "seconds": 1.5,
+    "error": null
+  },
+  "event": {
+    "type": "research.experiment_result",
+    "phase": "VERIFIED",
+    "timestamp": "2026-11-14T00:00:00+00:00",
+    "run_id": "R-valid",
+    "decision_reason": "candidate=exp-001",
+    "experiment_id": "exp-001",
+    "tokens": {},
+    "remaining": {},
+    "extra": {"trial": {"experiment_id": "exp-001"}}
+  },
+  "verdict": {
+    "verdict": "supported",
+    "metric": {"val1_auc": 0.62, "val2_auc": 0.64, "merged_auc": 0.63},
+    "checks": ["no_leakage"],
+    "evidence_ids": ["E1"],
+    "tokens": 0,
+    "seconds": 0.0,
+    "artifacts_hash": "sha256:abc",
+    "test": false
+  }
+}

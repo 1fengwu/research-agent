@@ -1,0 +1,65 @@
+[
+  {
+    "kind": "task",
+    "reason": "missing task_id",
+    "raw": {"data_path": "data/demo_panel.csv"}
+  },
+  {
+    "kind": "task",
+    "reason": "train+test must stay below 1",
+    "raw": {
+      "task_id": "bad",
+      "data_path": "data/demo_panel.csv",
+      "split": {"train": 0.9, "test": 0.2}
+    }
+  },
+  {
+    "kind": "experiment",
+    "reason": "missing model",
+    "raw": {
+      "experiment_id": "exp-bad",
+      "hypothesis_id": "H1",
+      "feature_set": "base"
+    }
+  },
+  {
+    "kind": "experiment",
+    "reason": "params must be an object",
+    "raw": {
+      "experiment_id": "exp-bad",
+      "hypothesis_id": "H1",
+      "feature_set": "base",
+      "model": "logistic",
+      "params": []
+    }
+  },
+  {
+    "kind": "trial",
+    "reason": "missing experiment_id",
+    "raw": {"val1": {"auc": 0.5, "valid_days": 1, "excluded": 0}}
+  },
+  {
+    "kind": "trial",
+    "reason": "auc outside [0, 1]",
+    "raw": {
+      "experiment_id": "exp-bad",
+      "val1": {"auc": 2.0, "valid_days": 1, "excluded": 0}
+    }
+  },
+  {
+    "kind": "event",
+    "reason": "missing run_id",
+    "raw": {"type": "research.run_started", "phase": "UNSEEN", "timestamp": "2026-11-14T00:00:00+00:00"}
+  },
+  {
+    "kind": "event",
+    "reason": "extra must be an object",
+    "raw": {
+      "type": "research.run_started",
+      "phase": "UNSEEN",
+      "timestamp": "2026-11-14T00:00:00+00:00",
+      "run_id": "R-bad",
+      "extra": []
+    }
+  }
+]
