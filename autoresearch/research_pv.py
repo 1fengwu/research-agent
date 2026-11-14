@@ -35,16 +35,17 @@ class ResearchPVPlanner:
         order: Optional[List[str]] = None,
         evolution: Optional[Any] = None,
         plan_size: Optional[int] = None,
+        defer_hypotheses: Optional[List[str]] = None,
     ) -> None:
         self._order = list(order) if order else [item[0] for item in PLAN_ORDER]
         self._specs: Dict[str, ExperimentSpec] = {}
         self._evolution = evolution
         self._plan_size = plan_size
+        self._deferred = frozenset(defer_hypotheses or ())
 
-    def _evolved_order(self) -> List[str]:
-        if self._evolution is not None:
-            return list(self._evolution.active_plan_order(self._order))
-        return list(self._order)
+    def candidate_order(self) -> List[str]:
+        order = self._evolution.active_plan_order(self._order) if self._evolution is not None else self._order
+        return sorted(order, key=self._deferred.__contains__)
 
     def _record_evolution(self, signals: List[Dict[str, Any]]) -> None:
         if self._evolution is not None:
@@ -80,7 +81,7 @@ class ResearchPVPlanner:
         limit = self._plan_size or max(1, int(task.budget.candidates))
         out: List[ExperimentSpec] = []
         index = 1
-        for hid in self._evolved_order():
+        for hid in self.candidate_order():
             if len(out) >= limit:
                 break
             spec = self._make_spec(task, index, hid)

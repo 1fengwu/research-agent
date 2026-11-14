@@ -196,7 +196,7 @@ def summarize_run(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     if isinstance(test_verdict, dict) and test_verdict.get("truncated"):
         test_verdict = {}
 
-    stop_reason = str(completed.get("decision_reason") or completed_summary.get("stop_reason") or "")
+    stop_reason = str((completed or {}).get("decision_reason") or completed_summary.get("stop_reason") or "")
     phase = _last(events, "research.completed").get("phase") if _last(events, "research.completed") else ""
     if not phase and events:
         phase = str(events[-1].get("phase") or "")

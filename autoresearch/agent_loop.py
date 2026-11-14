@@ -736,6 +736,7 @@ class ResearchOrchestrator:
             "phase": final_phase,
             "stop_reason": stop or "completed",
             "tested": tested,
+            "baseline": state.get("baseline") or {},
             "locked": locked,
             "test_verdict": as_jsonable(test_verdict) if test_verdict else None,
             "experiments": list(state.get("experiments", [])),

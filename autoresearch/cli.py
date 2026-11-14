@@ -12,17 +12,19 @@ import argparse
 import importlib
 import json
 import sys
+from uuid import uuid4
 from pathlib import Path
 from typing import Any, Dict, List
 
 from . import report as report_mod
 from .budget_gate import BudgetGate
 from .contracts import load_task_spec
+from .discovery import apply_question, discover
 from .experiment import ResearchBackend
 from .evolution import ResearchIterationStore
 from .llm_router import HttpJsonCloudClient, NullCloudClient, ResearchRouter
 from .outputs import validate_event_list, validate_ledger, validate_summary
-from .research_pv import ResearchPVPlanner
+from .research_pv import PLAN_ORDER, ResearchPVPlanner
 
 DEFAULT_MOCK_EVENTS = Path(__file__).resolve().parent / "mock_events.json"
 DEFAULT_EVENTS = Path.cwd() / ".arc" / "runner-events.jsonl"
@@ -189,8 +191,30 @@ def cmd_run(args: argparse.Namespace) -> int:
     ledger_dir.mkdir(parents=True, exist_ok=True)
     evolution_path.parent.mkdir(parents=True, exist_ok=True)
 
-    ledger = BudgetGate(task.budget)
+    run_id = f"R{uuid4().hex}" if args.discover else None
+    ledger = BudgetGate(task.budget, str(ledger_dir / f"{run_id}.json") if run_id else None)
     cloud_client = HttpJsonCloudClient()
+    discovery = None
+    discovery_call = None
+    order = None
+    if args.research_question:
+        discovery = json.loads(Path(args.research_question).read_text(encoding="utf-8"))
+        if discovery["status"] == "generated":
+            task = apply_question(task, discovery)
+            order = discovery["hypotheses"]
+    elif args.discover:
+        if cloud_client.configured():
+            def publish_profile(facts):
+                (output_dir / "discovery-profile.json").write_text(
+                    json.dumps(facts, ensure_ascii=False), encoding="utf-8"
+                )
+
+            task, discovery, order, discovery_call = discover(
+                task, cloud_client, ledger, [item[0] for item in PLAN_ORDER],
+                on_profile=publish_profile,
+            )
+        else:
+            discovery = {"status": "offline"}
     if not cloud_client.configured():
         cloud_client = NullCloudClient()
     router = ResearchRouter(
@@ -203,17 +227,41 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     with ResearchIterationStore(str(evolution_path)) as evolution_store:
         backend = ResearchBackend(task)
+        if order:
+            order = list(dict.fromkeys([*order, *(item[0] for item in PLAN_ORDER)]))
+        planner = ResearchPVPlanner(order=order, evolution=evolution_store, defer_hypotheses=args.defer_hypothesis)
+        if args.strategy_context:
+            Path(args.strategy_context).write_text(json.dumps({
+                "version": evolution_store.active_version_id,
+                "candidate_order": planner.candidate_order(),
+                "deferred_hypotheses": args.defer_hypothesis,
+            }), encoding="utf-8")
         orchestrator = ResearchOrchestrator(
             task,
             data=backend,
             oracle=_make_oracle(oracle_cls, backend, output_dir),
-            planner=ResearchPVPlanner(evolution=evolution_store),
+            planner=planner,
             router=router,
             ledger=ledger,
             writer=EventWriter(str(events_path)),
-            run_ledger_dir=str(ledger_dir),
+            run_id=run_id,
+            run_ledger_dir=None if run_id else str(ledger_dir),
         )
+        if discovery is not None:
+            (output_dir / "research-question.json").write_text(
+                json.dumps(discovery, ensure_ascii=False), encoding="utf-8"
+            )
+            if discovery_call:
+                orchestrator.writer.append(
+                    "research.model_call", "PLANNING", orchestrator.run_id,
+                    extra=discovery_call, remaining=ledger.snapshot()
+                )
         summary = orchestrator.run()
+        if run_id:
+            summary["elapsed_seconds"] = round(ledger.elapsed_seconds(), 3)
+        if discovery is not None:
+            summary["research_question"] = discovery
+            summary["label_horizon"] = task.label_horizon
     try:
         validate_summary(summary)
         validate_ledger(summary["ledger"])
@@ -223,6 +271,10 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"运行产物不符合后端契约: {exc}", file=sys.stderr)
         return 2
     print(json.dumps(summary, ensure_ascii=True, indent=2, default=str))
+    if args.summary_file:
+        Path(args.summary_file).write_text(
+            json.dumps(summary, ensure_ascii=False, default=str), encoding="utf-8"
+        )
     if args.out:
         out_dir = Path(args.out)
         report_path, package_path, snapshot_path = _out_files(
@@ -259,6 +311,13 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--evolution", default=str(DEFAULT_EVOLUTION))
     run.add_argument("--oracle", default=DEFAULT_ORACLE)
     run.add_argument("--out")
+    discovery = run.add_mutually_exclusive_group()
+    discovery.add_argument("--discover", action="store_true")
+    discovery.add_argument("--research-question", help="Reuse a saved discovery result for comparison")
+    run.add_argument("--strategy-context", help="Write the initial policy version and candidate order")
+    run.add_argument("--defer-hypothesis", action="append", default=[],
+                     help="Evaluate this hypothesis after other candidates")
+    run.add_argument("--summary-file", help="Write the validated run summary to JSON")
     return parser
 
 

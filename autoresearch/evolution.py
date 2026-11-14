@@ -124,6 +124,10 @@ class ResearchIterationStore:
     def snapshot(self) -> Dict[str, Any]:
         return self.store.snapshot(self._active_version_id)
 
+    @property
+    def active_version_id(self) -> str:
+        return self._active_version_id
+
     def view(self) -> policy.View:
         return policy.View(self.snapshot())
 

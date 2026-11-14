@@ -27,6 +27,7 @@ if __package__ in (None, ""):
 
 from autoresearch import ui as ui_mod  # noqa: E402
 from autoresearch import report as report_mod  # noqa: E402
+from autoresearch import judge_view  # noqa: E402
 from autoresearch.contracts import as_jsonable, load_task_spec  # noqa: E402
 from autoresearch.data import build_profile, read_panel  # noqa: E402
 
@@ -83,8 +84,7 @@ def _source_options() -> Dict[str, Path]:
                 % (metrics.parent.name, relative.parts[0], events.parent.name)
             ] = events
     options["离线演示（mock_events.json）"] = MOCK_EVENTS
-    if ARC_EVENTS.exists():
-        options[".arc/runner-events.jsonl"] = ARC_EVENTS
+    options["实时研究（.arc/runner-events.jsonl）"] = ARC_EVENTS
     if DEMO_EVENTS.exists():
         options[".arc/demo/runner-events.jsonl"] = DEMO_EVENTS
     return options
@@ -122,14 +122,15 @@ def _load_pre_gate() -> Tuple[Dict[str, Any], str]:
     return {}, ".arc/pre_gate.json 尚未生成"
 
 
-def _task_payload_from_form() -> Dict[str, Any]:
+def _task_payload_from_form(*, use_defaults: bool = False) -> Dict[str, Any]:
+    values = {} if use_defaults else st.session_state
     return {
-        "task_id": st.session_state.get("task_id", "task-demo-001"),
-        "data_path": str(st.session_state.get("data_path", DEMO_CSV)),
+        "task_id": values.get("task_id", "task-demo-001"),
+        "data_path": str(values.get("data_path", DEMO_CSV)),
         "data_hash": "",
-        "label_horizon": int(st.session_state.get("label_horizon", 5)),
+        "label_horizon": int(values.get("label_horizon", 5)),
         "split": {"train": 0.6, "val_windows": 2, "test": 0.2, "gap_days": 5},
-        "seed": int(st.session_state.get("seed", 42)),
+        "seed": int(values.get("seed", 42)),
         "budget": {
             "candidates": 4,
             "cloud_calls": 3,
@@ -1517,7 +1518,15 @@ def _render_evaluation(evaluation: Optional[Path], events_path: Path, run_id: st
 
 
 def main() -> None:
-    st.set_page_config(page_title="Helix 赫力 评审工作台", layout="wide")
+    full = st.query_params.get("view") == "workbench"
+    st.set_page_config(page_title="Helix 赫力 评审工作台", layout="wide" if full else "centered",
+                       initial_sidebar_state="auto" if full else "collapsed")
+    if not full:
+        judge_view.render(REPO_ROOT, _task_payload_from_form(use_defaults=True), MOCK_EVENTS)
+        return
+    if st.sidebar.button("返回极简评审页"):
+        del st.query_params["view"]
+        st.rerun()
     _inject_styles()
     _render_header()
     _render_innovation()
@@ -1548,7 +1557,7 @@ def main() -> None:
     else:
         st.sidebar.info("数据模式：%s" % mode)
     st.session_state["events_path"] = str(events_path)
-    events, load_error = _safe_load_events(events_path)
+    events, load_error = _safe_load_events(events_path) if events_path.exists() else ([], "")
     runs = report_mod.group_runs(events)
     if runs:
         run_options = [str(run["run_id"]) for run in runs]
@@ -1593,11 +1602,13 @@ def main() -> None:
         else:
             st.info("如需创建任务，请在侧栏切换到实时运行或离线演示。")
     with tab_track:
+        if events_path in (MOCK_EVENTS, DEMO_EVENTS):
+            st.info("当前为离线回放，图表显示样例事件。要查看本次研究的 Token 消耗，请关闭路演模式，切换到「实时研究」并启动任务。")
         if summary:
             _render_track(summary)
         else:
             st.info("暂无事件。请先在“创建任务”启动离线联调或真实研究。")
-        if st.checkbox("自动刷新（2 秒）") and events:
+        if st.checkbox("自动刷新（2 秒）") and (events or events_path == ARC_EVENTS):
             time.sleep(2.0)
             st.rerun()
     with tab_review:

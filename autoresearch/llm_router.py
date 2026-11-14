@@ -5,11 +5,13 @@ import json
 import math
 import os
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, runtime_checkable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from uuid import uuid4
 
 from .budget_gate import BudgetBlocked, BudgetExceeded, BudgetGate
 
@@ -453,6 +455,7 @@ class HttpJsonCloudClient:
         *,
         max_tokens: int,
         timeout_s: float,
+        system_prompt: str = STRUCTURED_REPLY_PROMPT,
     ) -> Dict[str, Any]:
         if not self.configured():
             raise RuntimeError("LLM client not configured (ARC_LLM_BASE_URL/API_KEY/MODEL)")
@@ -460,7 +463,7 @@ class HttpJsonCloudClient:
         payload = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": STRUCTURED_REPLY_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": json.dumps(summary, ensure_ascii=False)},
             ],
             "max_tokens": int(max_tokens),
@@ -782,9 +785,21 @@ class ResearchRouter:
                 "mode": mode,
             }
 
+        call_id = uuid4().hex if isinstance(self.client, HttpJsonCloudClient) else None
+        started = time.monotonic()
         try:
             raw = self.client.call(summary, max_tokens=max_out, timeout_s=self.timeout_s)
         except Exception as exc:
+            if call_id:
+                cause = exc.__cause__ or exc
+                if isinstance(cause, URLError):
+                    cause = cause.reason
+                outcome = "timeout" if isinstance(cause, TimeoutError) else "failed"
+                self._emit(
+                    "research.model_call", phase, outcome,
+                    extra={"call_id": call_id, "elapsed_seconds": time.monotonic() - started,
+                           "outcome": outcome},
+                )
             note = f"cloud_call_failed:{exc}"
             self._emit(
                 "research.escalation_failed",
@@ -801,6 +816,12 @@ class ResearchRouter:
                 "mode": mode,
             }
 
+        if call_id:
+            self._emit(
+                "research.model_call", phase, "responded",
+                extra={"call_id": call_id, "elapsed_seconds": time.monotonic() - started,
+                       "outcome": "responded"},
+            )
         content = str(raw.get("content") or raw.get("text") or "")
         usage = raw.get("usage") or {}
         try:

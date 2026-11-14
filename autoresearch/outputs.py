@@ -120,7 +120,13 @@ def validate_summary(summary: Dict[str, Any]) -> None:
     _require_keys(summary, REQUIRED_SUMMARY_FIELDS, "summary")
     _require_bool(summary["tested"], "summary.tested")
     _require_dict(summary["locked"], "summary.locked")
-    _require_dict(summary["test_verdict"], "summary.test_verdict")
+    if summary["tested"] or summary["test_verdict"] is not None:
+        _require_dict(summary["test_verdict"], "summary.test_verdict")
+        _require_keys(
+            summary["test_verdict"],
+            ("verdict", "metric", "checks", "evidence_ids", "artifacts_hash", "test"),
+            "summary.test_verdict",
+        )
     _require_dict(summary["budget"], "summary.budget")
     _require_dict(summary["ledger"], "summary.ledger")
     _require_str(summary["run_id"], "summary.run_id")
@@ -128,11 +134,6 @@ def validate_summary(summary: Dict[str, Any]) -> None:
     _require_str(summary["phase"], "summary.phase")
     _require_str(summary["stop_reason"], "summary.stop_reason")
     _require_keys(summary["locked"], ("name",), "summary.locked")
-    _require_keys(
-        summary["test_verdict"],
-        ("verdict", "metric", "checks", "evidence_ids", "artifacts_hash", "test"),
-        "summary.test_verdict",
-    )
     _require_keys(
         summary["budget"],
         ("used_candidates", "used_cloud_calls", "used_cloud_tokens"),

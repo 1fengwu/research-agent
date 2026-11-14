@@ -1,0 +1,21 @@
+{
+  "name": "landing",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "build": "tailwindcss -i tailwind.css -o ../../autoresearch/hero-tailwind.css --minify && esbuild hero.jsx --bundle --format=esm --minify --outfile=../../autoresearch/hero.bundle.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.5",
+    "esbuild": "0.28.2",
+    "tailwindcss": "4.3.5"
+  }
+}
