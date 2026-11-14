@@ -1,0 +1,834 @@
+[
+  {
+    "type": "research.run_started",
+    "phase": "UNSEEN",
+    "timestamp": "2026-11-14T03:00:00.000Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "task=task-demo-full",
+    "experiment_id": "",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 0,
+      "remaining_candidates": 4,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 0.0,
+      "remaining_seconds": 180.0
+    },
+    "extra": {
+      "task": {
+        "task_id": "task-demo-full",
+        "data_path": "data/demo_panel.csv",
+        "data_hash": "sha256:549019389da7d054902fd97cdbb32b6d4c30bf8d575dae0c981456ec8bb28297",
+        "label_horizon": 5,
+        "split": {"train": 0.6, "val_windows": 2, "test": 0.2, "gap_days": 5},
+        "seed": 42,
+        "budget": {
+          "candidates": 4,
+          "cloud_calls": 3,
+          "cloud_tokens": 6000,
+          "wall_seconds": 180,
+          "reserve_seconds": 60,
+          "reserve_tokens": 1200
+        },
+        "primary_metric": "daily_auc_mean"
+      }
+    }
+  },
+  {
+    "type": "research.data_profile",
+    "phase": "PLANNING",
+    "timestamp": "2026-11-14T03:00:00.120Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "date=['2022-01-03', '2023-03-24']; symbols=14; missing=0.0",
+    "experiment_id": "",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 0,
+      "remaining_candidates": 4,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 0.12,
+      "remaining_seconds": 179.88
+    },
+    "extra": {
+      "profile": {
+        "date_range": ["2022-01-03", "2023-03-24"],
+        "symbols": 14,
+        "missing_rate": 0.0,
+        "label_computable_ratio": 0.984375,
+        "anomalies": [],
+        "data_anomaly": false,
+        "data_hash": "sha256:549019389da7d054902fd97cdbb32b6d4c30bf8d575dae0c981456ec8bb28297"
+      }
+    }
+  },
+  {
+    "type": "research.baseline",
+    "phase": "PLANNED",
+    "timestamp": "2026-11-14T03:00:00.360Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "baseline merged_auc=0.661491",
+    "experiment_id": "",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 0,
+      "remaining_candidates": 4,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 0.36,
+      "remaining_seconds": 179.64
+    },
+    "extra": {
+      "baseline": {
+        "merged_auc": 0.661491,
+        "config": {
+          "experiment_id": "baseline",
+          "hypothesis_id": null,
+          "evidence_ids": [],
+          "feature_set": "base",
+          "model": "logistic",
+          "params": {},
+          "missing": "median",
+          "scaling": "standard"
+        },
+        "trial": {
+          "val1": {"auc": 0.665012, "valid_days": 46, "excluded": 0},
+          "val2": {"auc": 0.65797, "valid_days": 46, "excluded": 0}
+        }
+      }
+    }
+  },
+  {
+    "type": "research.hypothesis_registered",
+    "phase": "PLANNED",
+    "timestamp": "2026-11-14T03:00:00.390Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "hypothesis=volatility",
+    "experiment_id": "exp-001",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 0,
+      "remaining_candidates": 4,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 0.39,
+      "remaining_seconds": 179.61
+    },
+    "extra": {
+      "spec": {
+        "experiment_id": "exp-001",
+        "hypothesis_id": "volatility",
+        "feature_set": "+volatility",
+        "model": "logistic",
+        "params": {},
+        "missing": "median",
+        "scaling": "standard",
+        "evidence_ids": ["hypothesis:volatility"]
+      }
+    }
+  },
+  {
+    "type": "research.hypothesis_registered",
+    "phase": "PLANNED",
+    "timestamp": "2026-11-14T03:00:00.410Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "hypothesis=volume",
+    "experiment_id": "exp-002",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 0,
+      "remaining_candidates": 4,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 0.41,
+      "remaining_seconds": 179.59
+    },
+    "extra": {
+      "spec": {
+        "experiment_id": "exp-002",
+        "hypothesis_id": "volume",
+        "feature_set": "+volume",
+        "model": "logistic",
+        "params": {},
+        "missing": "median",
+        "scaling": "standard",
+        "evidence_ids": ["hypothesis:volume"]
+      }
+    }
+  },
+  {
+    "type": "research.hypothesis_registered",
+    "phase": "PLANNED",
+    "timestamp": "2026-11-14T03:00:00.430Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "hypothesis=volatility_volume",
+    "experiment_id": "exp-003",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 0,
+      "remaining_candidates": 4,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 0.43,
+      "remaining_seconds": 179.57
+    },
+    "extra": {
+      "spec": {
+        "experiment_id": "exp-003",
+        "hypothesis_id": "volatility_volume",
+        "feature_set": "+volatility_volume",
+        "model": "logistic",
+        "params": {},
+        "missing": "median",
+        "scaling": "standard",
+        "evidence_ids": ["hypothesis:volatility_volume"]
+      }
+    }
+  },
+  {
+    "type": "research.hypothesis_registered",
+    "phase": "PLANNED",
+    "timestamp": "2026-11-14T03:00:00.450Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "hypothesis=tree_shallow",
+    "experiment_id": "exp-004",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 0,
+      "remaining_candidates": 4,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 0.45,
+      "remaining_seconds": 179.55
+    },
+    "extra": {
+      "spec": {
+        "experiment_id": "exp-004",
+        "hypothesis_id": "tree_shallow",
+        "feature_set": "base",
+        "model": "tree_shallow",
+        "params": {"max_depth": 5, "min_samples_leaf": 20},
+        "missing": "median",
+        "scaling": "standard",
+        "evidence_ids": ["hypothesis:tree_shallow"]
+      }
+    }
+  },
+  {
+    "type": "research.experiment_started",
+    "phase": "EXPERIMENTING",
+    "timestamp": "2026-11-14T03:00:00.480Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "candidate=exp-001",
+    "experiment_id": "exp-001",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 0,
+      "remaining_candidates": 3,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 0.48,
+      "remaining_seconds": 179.52
+    },
+    "extra": {}
+  },
+  {
+    "type": "research.experiment_result",
+    "phase": "VERIFIED",
+    "timestamp": "2026-11-14T03:00:01.040Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "val1=0.668146/46d val2=0.666371/46d",
+    "experiment_id": "exp-001",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 1,
+      "remaining_candidates": 3,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 1.04,
+      "remaining_seconds": 178.96
+    },
+    "extra": {
+      "trial": {
+        "experiment_id": "exp-001",
+        "val1": {"auc": 0.668146, "valid_days": 46, "excluded": 0},
+        "val2": {"auc": 0.666371, "valid_days": 46, "excluded": 0},
+        "missing_rates": {},
+        "seconds": 0.56,
+        "error": null
+      }
+    }
+  },
+  {
+    "type": "research.experiment_verdict",
+    "phase": "VERIFIED",
+    "timestamp": "2026-11-14T03:00:01.070Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "verdict:inconclusive",
+    "experiment_id": "exp-001",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 1,
+      "remaining_candidates": 3,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 1.07,
+      "remaining_seconds": 178.93
+    },
+    "extra": {
+      "verdict": {
+        "verdict": "inconclusive",
+        "metric": {"val1": 0.668146, "val2": 0.666371},
+        "checks": ["split_hash_ok"],
+        "test": false
+      }
+    }
+  },
+  {
+    "type": "research.experiment_started",
+    "phase": "EXPERIMENTING",
+    "timestamp": "2026-11-14T03:00:01.100Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "candidate=exp-002",
+    "experiment_id": "exp-002",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 1,
+      "remaining_candidates": 2,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 1.1,
+      "remaining_seconds": 178.9
+    },
+    "extra": {}
+  },
+  {
+    "type": "research.experiment_result",
+    "phase": "VERIFIED",
+    "timestamp": "2026-11-14T03:00:01.640Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "val1=0.661934/46d val2=0.649512/46d",
+    "experiment_id": "exp-002",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 2,
+      "remaining_candidates": 2,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 1.64,
+      "remaining_seconds": 178.36
+    },
+    "extra": {
+      "trial": {
+        "experiment_id": "exp-002",
+        "val1": {"auc": 0.661934, "valid_days": 46, "excluded": 0},
+        "val2": {"auc": 0.649512, "valid_days": 46, "excluded": 0},
+        "missing_rates": {"volume_ratio": 0.02},
+        "seconds": 0.54,
+        "error": null
+      }
+    }
+  },
+  {
+    "type": "research.experiment_verdict",
+    "phase": "VERIFIED",
+    "timestamp": "2026-11-14T03:00:01.670Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "verdict:refuted",
+    "experiment_id": "exp-002",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 2,
+      "remaining_candidates": 2,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 1.67,
+      "remaining_seconds": 178.33
+    },
+    "extra": {
+      "verdict": {
+        "verdict": "refuted",
+        "metric": {"val1": 0.661934, "val2": 0.649512},
+        "checks": ["split_hash_ok", "window_drop"],
+        "test": false
+      }
+    }
+  },
+  {
+    "type": "research.revised",
+    "phase": "REVISED",
+    "timestamp": "2026-11-14T03:00:01.700Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "evidence_signals:1",
+    "experiment_id": "exp-002",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 2,
+      "remaining_candidates": 2,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 1.7,
+      "remaining_seconds": 178.3
+    },
+    "extra": {}
+  },
+  {
+    "type": "research.experiment_started",
+    "phase": "EXPERIMENTING",
+    "timestamp": "2026-11-14T03:00:01.730Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "candidate=exp-003",
+    "experiment_id": "exp-003",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 2,
+      "remaining_candidates": 1,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 1.73,
+      "remaining_seconds": 178.27
+    },
+    "extra": {}
+  },
+  {
+    "type": "research.experiment_result",
+    "phase": "VERIFIED",
+    "timestamp": "2026-11-14T03:00:02.280Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "val1=0.659272/46d val2=0.660603/46d",
+    "experiment_id": "exp-003",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 3,
+      "remaining_candidates": 1,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 2.28,
+      "remaining_seconds": 177.72
+    },
+    "extra": {
+      "trial": {
+        "experiment_id": "exp-003",
+        "val1": {"auc": 0.659272, "valid_days": 46, "excluded": 0},
+        "val2": {"auc": 0.660603, "valid_days": 46, "excluded": 0},
+        "missing_rates": {},
+        "seconds": 0.55,
+        "error": null
+      }
+    }
+  },
+  {
+    "type": "research.experiment_verdict",
+    "phase": "VERIFIED",
+    "timestamp": "2026-11-14T03:00:02.310Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "verdict:inconclusive",
+    "experiment_id": "exp-003",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 3,
+      "remaining_candidates": 1,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 2.31,
+      "remaining_seconds": 177.69
+    },
+    "extra": {
+      "verdict": {
+        "verdict": "inconclusive",
+        "metric": {"val1": 0.659272, "val2": 0.660603},
+        "checks": ["split_hash_ok"],
+        "test": false
+      }
+    }
+  },
+  {
+    "type": "research.experiment_started",
+    "phase": "EXPERIMENTING",
+    "timestamp": "2026-11-14T03:00:02.340Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "candidate=exp-004",
+    "experiment_id": "exp-004",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 3,
+      "remaining_candidates": 0,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 2.34,
+      "remaining_seconds": 177.66
+    },
+    "extra": {}
+  },
+  {
+    "type": "research.experiment_result",
+    "phase": "VERIFIED",
+    "timestamp": "2026-11-14T03:00:02.900Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "val1=0.674512/46d val2=0.677103/46d",
+    "experiment_id": "exp-004",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 4,
+      "remaining_candidates": 0,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 2.9,
+      "remaining_seconds": 177.1
+    },
+    "extra": {
+      "trial": {
+        "experiment_id": "exp-004",
+        "val1": {"auc": 0.674512, "valid_days": 46, "excluded": 0},
+        "val2": {"auc": 0.677103, "valid_days": 46, "excluded": 0},
+        "missing_rates": {},
+        "seconds": 0.56,
+        "error": null
+      }
+    }
+  },
+  {
+    "type": "research.experiment_verdict",
+    "phase": "VERIFIED",
+    "timestamp": "2026-11-14T03:00:02.930Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "verdict:supported",
+    "experiment_id": "exp-004",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 4,
+      "remaining_candidates": 0,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 2.93,
+      "remaining_seconds": 177.07
+    },
+    "extra": {
+      "verdict": {
+        "verdict": "supported",
+        "metric": {"val1": 0.674512, "val2": 0.677103},
+        "checks": ["split_hash_ok", "no_leakage"],
+        "test": false
+      }
+    }
+  },
+  {
+    "type": "research.locked",
+    "phase": "LOCKED",
+    "timestamp": "2026-11-14T03:00:02.950Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "locked:exp-004",
+    "experiment_id": "",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 4,
+      "remaining_candidates": 0,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 2.95,
+      "remaining_seconds": 177.05
+    },
+    "extra": {
+      "locked": {
+        "name": "exp-004",
+        "config": {
+          "experiment_id": "exp-004",
+          "hypothesis_id": "tree_shallow",
+          "feature_set": "base",
+          "model": "tree_shallow",
+          "params": {"max_depth": 5, "min_samples_leaf": 20},
+          "missing": "median",
+          "scaling": "standard"
+        },
+        "merged_auc": 0.675808,
+        "evidence_ids": ["exp-002:window_drop"],
+        "reason": "best merged candidate auc=0.6758"
+      }
+    }
+  },
+  {
+    "type": "research.tested",
+    "phase": "TESTED",
+    "timestamp": "2026-11-14T03:00:03.320Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "verdict:supported",
+    "experiment_id": "exp-004",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 4,
+      "remaining_candidates": 0,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 3.32,
+      "remaining_seconds": 176.68
+    },
+    "extra": {
+      "verdict": {
+        "verdict": "supported",
+        "metric": {"auc": 0.6842, "valid_days": 31, "excluded": 14},
+        "checks": ["split_hash_ok", "label_maturity_ok", "no_leakage"],
+        "test": true
+      },
+      "locked_spec": {
+        "experiment_id": "exp-004",
+        "hypothesis_id": "tree_shallow",
+        "feature_set": "base",
+        "model": "tree_shallow",
+        "params": {"max_depth": 5, "min_samples_leaf": 20},
+        "missing": "median",
+        "scaling": "standard"
+      }
+    }
+  },
+  {
+    "type": "research.completed",
+    "phase": "TESTED",
+    "timestamp": "2026-11-14T03:00:03.340Z",
+    "run_id": "R20261114-001",
+    "decision_reason": "stop_reason:plan_exhausted",
+    "experiment_id": "",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 4,
+      "remaining_candidates": 0,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 3,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 6000,
+      "elapsed_seconds": 3.34,
+      "remaining_seconds": 176.66
+    },
+    "extra": {
+      "summary": {
+        "run_id": "R20261114-001",
+        "task_id": "task-demo-full",
+        "phase": "TESTED",
+        "stop_reason": "plan_exhausted",
+        "tested": true,
+        "evidence_ids": ["exp-002:window_drop"],
+        "stall_rounds": 3,
+        "window_conflict": false,
+        "escalation_attempts": 0,
+        "escalation_valid": 0,
+        "budget": {
+          "used_candidates": 4,
+          "remaining_candidates": 0,
+          "used_cloud_calls": 0,
+          "remaining_cloud_calls": 3,
+          "used_cloud_tokens": 0,
+          "remaining_cloud_tokens": 6000,
+          "elapsed_seconds": 3.34,
+          "remaining_seconds": 176.66
+        },
+        "elapsed_seconds": 3.34
+      }
+    }
+  },
+  {
+    "type": "research.run_started",
+    "phase": "UNSEEN",
+    "timestamp": "2026-11-14T03:10:00.000Z",
+    "run_id": "R20261114-002",
+    "decision_reason": "task=task-demo-low-budget",
+    "experiment_id": "",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 0,
+      "remaining_candidates": 1,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 1,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 300,
+      "elapsed_seconds": 0.0,
+      "remaining_seconds": 40.0
+    },
+    "extra": {
+      "task": {
+        "task_id": "task-demo-low-budget",
+        "data_path": "data/demo_panel.csv",
+        "data_hash": "sha256:549019389da7d054902fd97cdbb32b6d4c30bf8d575dae0c981456ec8bb28297",
+        "label_horizon": 5,
+        "split": {"train": 0.6, "val_windows": 2, "test": 0.2, "gap_days": 5},
+        "seed": 42,
+        "budget": {
+          "candidates": 1,
+          "cloud_calls": 1,
+          "cloud_tokens": 300,
+          "wall_seconds": 40,
+          "reserve_seconds": 60,
+          "reserve_tokens": 1200
+        },
+        "primary_metric": "daily_auc_mean"
+      }
+    }
+  },
+  {
+    "type": "research.data_profile",
+    "phase": "PLANNING",
+    "timestamp": "2026-11-14T03:10:00.050Z",
+    "run_id": "R20261114-002",
+    "decision_reason": "date=['2022-01-03', '2023-03-24']; symbols=14; missing=0.0; anomalies=label_maturity",
+    "experiment_id": "",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 0,
+      "remaining_candidates": 1,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 1,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 300,
+      "elapsed_seconds": 0.05,
+      "remaining_seconds": 39.95
+    },
+    "extra": {
+      "profile": {
+        "date_range": ["2022-01-03", "2023-03-24"],
+        "symbols": 14,
+        "missing_rate": 0.0,
+        "label_computable_ratio": 0.984375,
+        "anomalies": ["label_maturity"],
+        "data_anomaly": true,
+        "data_hash": "sha256:549019389da7d054902fd97cdbb32b6d4c30bf8d575dae0c981456ec8bb28297"
+      }
+    }
+  },
+  {
+    "type": "research.baseline",
+    "phase": "PLANNED",
+    "timestamp": "2026-11-14T03:10:00.160Z",
+    "run_id": "R20261114-002",
+    "decision_reason": "baseline merged_auc=0.661491",
+    "experiment_id": "",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 0,
+      "remaining_candidates": 1,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 1,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 300,
+      "elapsed_seconds": 0.16,
+      "remaining_seconds": 39.84
+    },
+    "extra": {
+      "baseline": {
+        "merged_auc": 0.661491,
+        "config": {
+          "experiment_id": "baseline",
+          "hypothesis_id": null,
+          "evidence_ids": [],
+          "feature_set": "base",
+          "model": "logistic",
+          "params": {},
+          "missing": "median",
+          "scaling": "standard"
+        }
+      }
+    }
+  },
+  {
+    "type": "research.escalation_blocked",
+    "phase": "PLANNED",
+    "timestamp": "2026-11-14T03:10:00.220Z",
+    "run_id": "R20261114-002",
+    "decision_reason": "budget_blocked:cloud_token_reserve_exhausted",
+    "experiment_id": "",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 0,
+      "remaining_candidates": 1,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 1,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 300,
+      "elapsed_seconds": 0.22,
+      "remaining_seconds": 39.78
+    },
+    "extra": {"trigger": ["data_anomaly"]}
+  },
+  {
+    "type": "research.completed",
+    "phase": "PARTIAL_COMPLETED",
+    "timestamp": "2026-11-14T03:10:00.240Z",
+    "run_id": "R20261114-002",
+    "decision_reason": "stop_reason:partial_completed",
+    "experiment_id": "",
+    "tokens": {},
+    "remaining": {
+      "used_candidates": 0,
+      "remaining_candidates": 1,
+      "used_cloud_calls": 0,
+      "remaining_cloud_calls": 1,
+      "used_cloud_tokens": 0,
+      "remaining_cloud_tokens": 300,
+      "elapsed_seconds": 0.24,
+      "remaining_seconds": 39.76
+    },
+    "extra": {
+      "summary": {
+        "run_id": "R20261114-002",
+        "task_id": "task-demo-low-budget",
+        "phase": "PARTIAL_COMPLETED",
+        "stop_reason": "partial_completed",
+        "tested": false,
+        "evidence_ids": [],
+        "budget": {
+          "used_candidates": 0,
+          "remaining_candidates": 1,
+          "used_cloud_calls": 0,
+          "remaining_cloud_calls": 1,
+          "used_cloud_tokens": 0,
+          "remaining_cloud_tokens": 300,
+          "elapsed_seconds": 0.24,
+          "remaining_seconds": 39.76
+        },
+        "elapsed_seconds": 0.24
+      }
+    }
+  }
+]

@@ -105,3 +105,32 @@ python -m autoresearch.replay --run-id <run_id> --output-dir .arc
 ```bash
 python -m unittest autoresearch.tests.test_c_tasks -v
 ```
+
+## D 说明：界面与报告
+
+角色 D 的交付位于本包：
+
+- `app.py`：单页 Streamlit 评审工作台（创建任务 / 跟踪研究 / 审查结论）；
+- `report.py`：事件聚合、Markdown 报告与复现包打包；
+- `mock_events.json`：离线联调事件流，UI 不依赖云模型也能走完整流程；
+- `cli.py`：界面异常时的 CLI 回放路径，以及接 C oracle 后的真实启动入口。
+
+D 只读 A 的事件、B 的数据摘要和 C 的指标，不在界面里生成研究结论。
+
+```bash
+pip install -r requirements-app.txt
+python -m streamlit run autoresearch/app.py
+
+# 离线联调 / 回放
+python -m autoresearch.cli demo
+python -m autoresearch.cli replay --events .arc/runner-events.jsonl
+
+# 真实后台启动（C 的 oracle 已由上游实现）
+python -m autoresearch.cli run --task .arc/task.json --oracle autoresearch.oracle:Oracle
+```
+
+测试：
+
+```bash
+python -m unittest autoresearch.tests.test_d_tasks -v
+```

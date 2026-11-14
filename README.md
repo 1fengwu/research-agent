@@ -9,16 +9,18 @@ Research Agent System 的竞赛交付仓库：面向量价信号验证场景，�
 | `docs/ResearchAgent-系统设计-v5.md` | 系统设计 v5：AutoResearch 量价信号验证工作台 |
 | `docs/AutoResearch-四人分工执行手册.md` | 四人 A/B/C/D 分工、小时级排期、接口、测试、红线、演示 |
 | `framework/` | ARC agent 框架源码（agent-arc-based） |
-| `autoresearch/` | A/B/C 已实现模块：A 编排/路由/预算门/契约，B 数据/实验/规划器，C 前置门/裁判/三臂指标/复现 |
+| `autoresearch/` | A/B/C/D 已实现模块：A 编排/路由/预算门/契约，B 数据/实验/规划器，C 前置门/裁判/三臂指标/复现，D 界面/报告/复现包 |
 | `data/` | B 固定 seed 演示面板、切分与画像 |
 | `requirements.txt` | 根目录 Python 依赖（pandas、scikit-learn） |
+| `requirements-app.txt` | D 页面额外依赖（streamlit） |
 
 ## 快速入口
 
 - 设计总览：[docs/ResearchAgent-系统设计-v5.md](docs/ResearchAgent-系统设计-v5.md)
 - 四人执行手册：[docs/AutoResearch-四人分工执行手册.md](docs/AutoResearch-四人分工执行手册.md)
 - ARC 框架说明：[framework/docs/EVOLUTION.md](framework/docs/EVOLUTION.md)
-- A/B/C 模块说明：[autoresearch/README.md](autoresearch/README.md)
+- A/B/C/D 模块说明：[autoresearch/README.md](autoresearch/README.md)
+- D 页面入口：[autoresearch/app.py](autoresearch/app.py)
 
 ## 上传注意
 
