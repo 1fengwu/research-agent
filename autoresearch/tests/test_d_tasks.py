@@ -191,6 +191,8 @@ class TestDCLIFallback(unittest.TestCase):
                     str(arc_dir / "runner-events.jsonl"),
                     "--ledger-dir",
                     str(arc_dir / "ledgers"),
+                    "--evolution",
+                    str(arc_dir / "evolution-research-pv.db"),
                 ],
                 cwd=str(REPO_ROOT),
                 capture_output=True,

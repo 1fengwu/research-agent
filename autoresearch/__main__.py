@@ -8,6 +8,7 @@ from uuid import uuid4
 from .agent_loop import EventWriter, ResearchOrchestrator
 from .budget_gate import BudgetGate
 from .contracts import as_jsonable, load_task_spec
+from .evolution import ResearchIterationStore
 from .experiment import ResearchBackend
 from .llm_router import HttpJsonCloudClient, NullCloudClient, ResearchRouter
 from .oracle import ResearchOracle
@@ -18,6 +19,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("data_path", type=Path, help="input panel CSV")
     parser.add_argument("--output-dir", type=Path, default=Path(".arc"))
+    parser.add_argument("--evolution", type=Path, default=Path(".arc/evolution/research-pv.db"))
     parser.add_argument("--cloud", action="store_true", help="enable the configured cloud model")
     args = parser.parse_args()
 
@@ -33,17 +35,21 @@ def main() -> int:
     backend = ResearchBackend(task)
     ledger = BudgetGate(task.budget)
     run_id = f"R{uuid4().hex}"
-    summary = ResearchOrchestrator(
-        task,
-        data=backend,
-        oracle=ResearchOracle(backend, output_dir=args.output_dir),
-        planner=ResearchPVPlanner(),
-        router=ResearchRouter(ledger, client=client),
-        ledger=ledger,
-        writer=EventWriter(args.output_dir / "runner-events.jsonl"),
-        run_id=run_id,
-        run_ledger_dir=args.output_dir / "ledgers",
-    ).run()
+    evolution_store = ResearchIterationStore(str(args.evolution))
+    try:
+        summary = ResearchOrchestrator(
+            task,
+            data=backend,
+            oracle=ResearchOracle(backend, output_dir=args.output_dir),
+            planner=ResearchPVPlanner(evolution=evolution_store),
+            router=ResearchRouter(ledger, client=client),
+            ledger=ledger,
+            writer=EventWriter(args.output_dir / "runner-events.jsonl"),
+            run_id=run_id,
+            run_ledger_dir=args.output_dir / "ledgers",
+        ).run()
+    finally:
+        evolution_store.close()
     prepared = backend.prepared_split()
     summary["data_hash"] = prepared.meta.get("data_hash") or ""
     summary["split_fingerprint"] = prepared.fingerprint

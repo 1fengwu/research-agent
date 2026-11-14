@@ -26,9 +26,23 @@ PLAN_ORDER: List[Tuple[str, str, str, Dict[str, Any], str, str]] = [
 class ResearchPVPlanner:
     """预注册假设，并把两窗 TrialResult 转成 A 可读的证据信号。"""
 
-    def __init__(self, order: Optional[List[str]] = None) -> None:
+    def __init__(
+        self,
+        order: Optional[List[str]] = None,
+        evolution: Optional[Any] = None,
+    ) -> None:
         self._order = list(order) if order else [item[0] for item in PLAN_ORDER]
         self._specs: Dict[str, ExperimentSpec] = {}
+        self._evolution = evolution
+
+    def _evolved_order(self) -> List[str]:
+        if self._evolution is not None:
+            return list(self._evolution.active_plan_order(self._order))
+        return list(self._order)
+
+    def _record_evolution(self, signals: List[Dict[str, Any]]) -> None:
+        if self._evolution is not None:
+            self._evolution.record_signals(signals)
 
     def _make_spec(self, task: TaskSpec, index: int, hid: str) -> ExperimentSpec:
         feature_set, model, params, missing, scaling = None, None, None, None, None
@@ -60,7 +74,7 @@ class ResearchPVPlanner:
         limit = max(1, int(task.budget.candidates))
         out: List[ExperimentSpec] = []
         index = 1
-        for hid in self._order:
+        for hid in self._evolved_order():
             if len(out) >= limit:
                 break
             spec = self._make_spec(task, index, hid)
@@ -153,7 +167,7 @@ class ResearchPVPlanner:
             else:
                 return []
 
-        return [
+        out = [
             {
                 "id": "%s:%s" % (experiment_id, reason),
                 "reason": reason,
@@ -165,6 +179,8 @@ class ResearchPVPlanner:
                 % (merged, baseline_auc, dropped, improved),
             }
         ]
+        self._record_evolution(out)
+        return out
 
 
 def plan(task: TaskSpec, view: Dict[str, Any], run_kind: str) -> List[ExperimentSpec]:

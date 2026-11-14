@@ -19,6 +19,7 @@ from . import report as report_mod
 from .budget_gate import BudgetGate
 from .contracts import load_task_spec
 from .experiment import ResearchBackend
+from .evolution import ResearchIterationStore
 from .llm_router import HttpJsonCloudClient, NullCloudClient, ResearchRouter
 from .research_pv import ResearchPVPlanner
 
@@ -26,6 +27,7 @@ DEFAULT_MOCK_EVENTS = Path(__file__).resolve().parent / "mock_events.json"
 DEFAULT_EVENTS = Path.cwd() / ".arc" / "runner-events.jsonl"
 DEFAULT_LEDGER_DIR = Path.cwd() / ".arc" / "ledgers"
 DEFAULT_OUTPUT_DIR = Path.cwd() / ".arc"
+DEFAULT_EVOLUTION = Path.cwd() / ".arc" / "evolution" / "research-pv.db"
 DEFAULT_ORACLE = "autoresearch.oracle:ResearchOracle"
 
 
@@ -165,9 +167,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     output_dir = Path(args.output_dir)
     events_path = Path(args.events)
     ledger_dir = Path(args.ledger_dir)
+    evolution_path = Path(args.evolution)
     output_dir.mkdir(parents=True, exist_ok=True)
     events_path.parent.mkdir(parents=True, exist_ok=True)
     ledger_dir.mkdir(parents=True, exist_ok=True)
+    evolution_path.parent.mkdir(parents=True, exist_ok=True)
 
     ledger = BudgetGate(task.budget)
     cloud_client = HttpJsonCloudClient()
@@ -176,18 +180,19 @@ def cmd_run(args: argparse.Namespace) -> int:
     router = ResearchRouter(ledger, client=cloud_client)
     from .agent_loop import EventWriter, ResearchOrchestrator
 
-    backend = ResearchBackend(task)
-    orchestrator = ResearchOrchestrator(
-        task,
-        data=backend,
-        oracle=_make_oracle(oracle_cls, backend, output_dir),
-        planner=ResearchPVPlanner(),
-        router=router,
-        ledger=ledger,
-        writer=EventWriter(str(events_path)),
-        run_ledger_dir=str(ledger_dir),
-    )
-    summary = orchestrator.run()
+    with ResearchIterationStore(str(evolution_path)) as evolution_store:
+        backend = ResearchBackend(task)
+        orchestrator = ResearchOrchestrator(
+            task,
+            data=backend,
+            oracle=_make_oracle(oracle_cls, backend, output_dir),
+            planner=ResearchPVPlanner(evolution=evolution_store),
+            router=router,
+            ledger=ledger,
+            writer=EventWriter(str(events_path)),
+            run_ledger_dir=str(ledger_dir),
+        )
+        summary = orchestrator.run()
     print(json.dumps(summary, ensure_ascii=False, indent=2, default=str))
     if args.out:
         out_dir = Path(args.out)
@@ -221,6 +226,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--events", default=str(DEFAULT_EVENTS))
     run.add_argument("--ledger-dir", default=str(DEFAULT_LEDGER_DIR))
     run.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
+    run.add_argument("--evolution", default=str(DEFAULT_EVOLUTION))
     run.add_argument("--oracle", default=DEFAULT_ORACLE)
     run.add_argument("--out")
     return parser

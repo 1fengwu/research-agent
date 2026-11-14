@@ -143,3 +143,25 @@ python -m autoresearch.cli run --task .arc/task.json --oracle autoresearch.oracl
 ```bash
 python -m unittest autoresearch.tests.test_d_tasks -v
 ```
+
+## 自进化迭代
+
+`autoresearch/evolution.py` 把 `framework/core/evolution` 的策略学习接到研究规划器：
+
+- 每次 `interpret()` 产生的证据会写进 SQLite 策略库（默认 `.arc/evolution/research-pv.db`）；
+- 规划器自动跳过已被反驳的假设，优先复测已有支持证据的假设；
+- 策略版本只追加，可回退、可审计；
+- 不同运行共用同一策略库时，上一轮学到的结论会作用于下一轮。
+
+```bash
+# 直接跑研究（默认使用自进化策略库）
+python -m autoresearch data/demo_panel.csv
+
+# 通过 CLI 启动，自定义策略库位置
+python -m autoresearch.cli run --task .arc/task.json \
+  --evolution .arc/evolution/research-pv.db
+```
+
+```bash
+python -m unittest autoresearch.tests.test_evolution_tasks -v
+```

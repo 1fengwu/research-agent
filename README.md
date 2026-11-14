@@ -10,7 +10,7 @@ Research Agent System 的竞赛交付仓库：面向量价信号验证场景，�
 | `docs/AutoResearch-四人分工执行手册.md` | 四人 A/B/C/D 分工、小时级排期、接口、测试、红线、演示 |
 | `docs/后端数据契约.md` | 前端、API、评测/复现共同消费的输出字段契约 |
 | `framework/` | ARC agent 框架源码（agent-arc-based） |
-| `autoresearch/` | A/B/C/D 已实现模块：A 编排/路由/预算门/契约，B 数据/实验/规划器，C 前置门/裁判/三臂指标/复现，D 界面/报告/复现包 |
+| `autoresearch/` | A/B/C/D 已实现模块：A 编排/路由/预算门/契约，B 数据/实验/规划器，C 前置门/裁判/三臂指标/复现，D 界面/报告/复现包，研究策略自进化桥 |
 | `data/` | B 固定 seed 演示面板、切分与画像 |
 | `requirements.txt` | 根目录 Python 依赖（pandas、scikit-learn） |
 | `requirements-app.txt` | D 页面额外依赖（streamlit） |
