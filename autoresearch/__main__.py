@@ -20,6 +20,7 @@ def main() -> int:
     parser.add_argument("data_path", type=Path, help="input panel CSV")
     parser.add_argument("--output-dir", type=Path, default=Path(".arc"))
     parser.add_argument("--evolution", type=Path, default=Path(".arc/evolution/research-pv.db"))
+    parser.add_argument("--seeds", type=str, default="42,2024,7")
     parser.add_argument("--cloud", action="store_true", help="enable the configured cloud model")
     args = parser.parse_args()
 
@@ -50,6 +51,17 @@ def main() -> int:
         ).run()
     finally:
         evolution_store.close()
+    try:
+        locked_spec = summary.get("locked", {}).get("config") or {}
+        seeds = [int(token) for token in args.seeds.split(",") if token.strip()]
+        audit = ResearchOracle(backend, output_dir=None).holdout_audit(locked_spec, seeds=seeds)
+        summary["seed_audit"] = audit
+        (args.output_dir / f"seed-audit-{run_id}.json").write_text(
+            json.dumps(audit, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    except Exception as exc:
+        summary["seed_audit"] = {"error": str(exc)}
     prepared = backend.prepared_split()
     summary["data_hash"] = prepared.meta.get("data_hash") or ""
     summary["split_fingerprint"] = prepared.fingerprint

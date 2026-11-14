@@ -10,6 +10,8 @@ from urllib.request import Request, urlopen
 
 from .budget_gate import BudgetBlocked, BudgetExceeded, BudgetGate
 
+DIFFICULTY_THRESHOLD = 2.0
+
 
 def _tokenize_env_value(value: str) -> str:
     value = value.strip()
@@ -98,6 +100,30 @@ def validate_reply(reply: Any) -> Tuple[bool, str, Dict[str, Any]]:
     return True, "", normalized
 
 
+def difficulty_score(state: Dict[str, Any]) -> float:
+    """根据执行反馈与剩余状态估算本轮任务难度。"""
+    score = 0.0
+    if bool(state.get("data_anomaly")):
+        score += 3.0
+    if int(state.get("stall_rounds", 0) or 0) >= 2:
+        score += 2.0
+    if bool(state.get("window_conflict")):
+        score += 2.0
+    if bool(state.get("critical_decision")):
+        score += 3.0
+    if bool(state.get("repeated_error_signature")):
+        score += 2.0
+    trial = state.get("last_trial")
+    if not isinstance(trial, dict):
+        baseline = state.get("baseline")
+        trial = baseline.get("trial") if isinstance(baseline, dict) else {}
+    missing = trial.get("missing_rates") if isinstance(trial, dict) else {}
+    if isinstance(missing, dict) and missing:
+        if max(float(value or 0.0) for value in missing.values()) >= 0.2:
+            score += 1.0
+    return min(10.0, score)
+
+
 def should_escalate(state: Dict[str, Any]) -> List[str]:
     """Structural triggers only; a rule path handles everything else."""
     reasons: List[str] = []
@@ -113,6 +139,8 @@ def should_escalate(state: Dict[str, Any]) -> List[str]:
         reasons.append("repeated_error_signature")
     if str(state.get("phase") or "").upper() == "WRITE_REPORT":
         reasons.append("finalize")
+    if difficulty_score(state) >= DIFFICULTY_THRESHOLD:
+        reasons.append("difficulty_high")
     return reasons
 
 

@@ -10,11 +10,12 @@
 from __future__ import annotations
 
 import json
+import statistics
 from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
 from threading import Lock
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from .contracts import Verdict, as_jsonable, experiment_fingerprint, normalize_experiment_spec
 from .data import FEATURE_GROUPS
@@ -96,6 +97,43 @@ class ResearchOracle:
         if left_auc is None or right_auc is None:
             return left_auc is None and right_auc is None
         return abs(float(left_auc) - float(right_auc)) <= AUC_TOLERANCE
+
+    def holdout_audit(
+        self,
+        spec: Dict[str, Any],
+        seeds: Sequence[int] = (42, 2024, 7),
+    ) -> Dict[str, Any]:
+        """多 seed 重跑锁定配置的 holdout，输出稳健性摘要（不改变官方判决）。"""
+        split = self.backend.prepared_split()
+        rows: List[Dict[str, Any]] = []
+        for seed in seeds:
+            raw = run_holdout_test(spec, split, seed=int(seed), include_trust=True)
+            test = raw.get("test") or {}
+            rows.append(
+                {
+                    "seed": int(seed),
+                    "auc": test.get("auc"),
+                    "spearman": test.get("spearman"),
+                    "brier": test.get("brier"),
+                    "pr_auc": test.get("pr_auc"),
+                    "auc_ci": test.get("auc_ci"),
+                    "permutation_p": test.get("permutation_p"),
+                }
+            )
+        aucs = [float(row["auc"]) for row in rows if row.get("auc") is not None]
+        if not aucs:
+            return {"seeds": rows, "error": "no valid holdout aucs"}
+        aucs_sorted = sorted(aucs)
+        median_auc = float(statistics.median(aucs_sorted))
+        lower_quartile = float(aucs_sorted[len(aucs_sorted) // 4])
+        upper_quartile = float(aucs_sorted[(3 * len(aucs_sorted)) // 4])
+        return {
+            "seeds": rows,
+            "auc_median": round(median_auc, 6),
+            "auc_iqr": [round(lower_quartile, 6), round(upper_quartile, 6)],
+            "auc_min": round(min(aucs_sorted), 6),
+            "auc_max": round(max(aucs_sorted), 6),
+        }
 
     def judge(
         self,

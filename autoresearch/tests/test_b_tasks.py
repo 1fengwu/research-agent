@@ -26,7 +26,7 @@ from autoresearch.data import (
     read_panel,
     split_document,
 )
-from autoresearch.experiment import ResearchBackend, run_experiment
+from autoresearch.experiment import ResearchBackend, run_experiment, run_holdout_test
 from autoresearch.llm_router import NullCloudClient, ResearchRouter
 from autoresearch.oracle import ResearchOracle
 from autoresearch.research_pv import ResearchPVPlanner
@@ -280,6 +280,37 @@ class TestBTrustEnhancements(unittest.TestCase):
             self.assertIn("spearman", raw["val1"])
             self.assertIn("brier", raw["val1"])
             self.assertIn("pr_auc", raw["val1"])
+
+    def test_holdout_trust_metrics_available_on_demand(self) -> None:
+        panel = read_panel(DEMO_CSV)
+        labelled = compute_labels(panel, horizon=5)
+        split = make_split(
+            labelled,
+            train_ratio=0.6,
+            val_windows=2,
+            test_ratio=0.2,
+            gap_days=5,
+            seed=42,
+            data_hash=canonical_panel_hash(panel),
+            split_id="trust-holdout",
+        )
+        raw = run_holdout_test(
+            {
+                "experiment_id": "baseline",
+                "hypothesis_id": None,
+                "feature_set": "base",
+                "model": "logistic",
+                "missing": "median",
+                "scaling": "standard",
+            },
+            split,
+            seed=42,
+            include_trust=True,
+        )
+        test = raw.get("test") or {}
+        self.assertIsNotNone(test.get("auc_ci"))
+        self.assertIsNotNone(test.get("permutation_p"))
+        self.assertIsNotNone(test.get("importance"))
 
 
 if __name__ == "__main__":

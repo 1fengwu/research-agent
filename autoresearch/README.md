@@ -171,3 +171,6 @@ python -m unittest autoresearch.tests.test_evolution_tasks -v
 - 特征新增 `+momentum`（`r10 / r60 / ma_dist5 / ma_dist20`）和 `+cross`（同日横截面排名 `x_rank_r5 / x_rank_r20 / x_rank_volume`）；
 - 模型新增 `gradient_boost`（`HistGradientBoostingClassifier`）和 `random_forest`（`RandomForestClassifier`）；
 - holdout 判决的 `metric` 额外输出 `spearman`、`brier`、`pr_auc`，用于检验排序能力、概率校准和正例排序质量。
+- 难度感知升级：`difficulty_score()` 综合数据异常、验证窗冲突、重复错误、停滞轮次等估算难度，达到阈值时触发 `difficulty_high` 云调用。
+- holdout 可信审计：`run_holdout_test(..., include_trust=True)` 输出 `auc_ci`（bootstrap CI）、`permutation_p`（置换检验）和 `importance`；主入口支持 `--seeds 42,2024,7` 生成 `seed-audit.json`。
+- 三臂对照：`python -m autoresearch.evaluate --data data/demo_panel.csv --out .arc/eval [--cloud]` 输出 `metrics.csv / metrics.json`，对比 A/B/C 三臂的完成度、AUC、token、耗时与成本。

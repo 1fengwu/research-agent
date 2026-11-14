@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 import os
+import random
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -27,6 +28,7 @@ from sklearn.ensemble import (
 )
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
+from sklearn.inspection import permutation_importance
 from sklearn.preprocessing import RobustScaler, StandardScaler
 from sklearn.tree import DecisionTreeClassifier
 
@@ -285,6 +287,9 @@ def _score_window(
     frame: pd.DataFrame,
     *,
     include_daily: bool = False,
+    include_importance: bool = False,
+    feature_cols: Optional[Sequence[str]] = None,
+    seed: Optional[int] = None,
 ) -> Dict[str, Any]:
     proba = model.predict_proba(x_eval)[:, 1]
     result = daily_auc(
@@ -301,6 +306,67 @@ def _score_window(
         result["pr_auc"] = round(float(average_precision_score(labels, proba)), 6)
     else:
         result["pr_auc"] = None
+
+    if include_daily:
+        daily_values = [
+            float(item["auc"])
+            for item in result.get("daily") or []
+            if item.get("auc") is not None
+        ]
+        if daily_values:
+            rng = random.Random(seed if seed is not None else 42)
+            boot_means = [
+                sum(rng.choices(daily_values, k=len(daily_values))) / len(daily_values)
+                for _ in range(500)
+            ]
+            boot_means.sort()
+            result["auc_ci"] = [
+                round(boot_means[12], 6),
+                round(boot_means[487], 6),
+            ]
+
+            observed = float(result.get("auc") or 0.0)
+            scored = frame.copy()
+            scored["_score"] = proba
+            perm_rng = random.Random((seed if seed is not None else 42) * 1000)
+            perm_means: List[float] = []
+            for _rep in range(100):
+                shuffled_labels: List[float] = []
+                shuffled_scores: List[float] = []
+                shuffled_dates: List[Any] = []
+                for _, group in scored.groupby("date", sort=True):
+                    labels_group = group["label"].to_numpy(dtype="float64").copy()
+                    perm_rng.shuffle(labels_group)
+                    shuffled_labels.extend(labels_group.tolist())
+                    shuffled_scores.extend(group["_score"].tolist())
+                    shuffled_dates.extend(group["date"].tolist())
+                perm = daily_auc(shuffled_labels, shuffled_scores, shuffled_dates)
+                if perm.get("auc") is not None:
+                    perm_means.append(float(perm["auc"]))
+            if perm_means:
+                p_value = (1 + sum(1 for x in perm_means if x >= observed)) / (1 + len(perm_means))
+                result["permutation_p"] = round(p_value, 6)
+
+    if include_importance and feature_cols:
+        importance: Dict[str, float] = {}
+        if len(set(labels)) >= 2:
+            try:
+                imp = permutation_importance(
+                    model,
+                    x_eval,
+                    labels,
+                    scoring="roc_auc",
+                    n_repeats=5,
+                    random_state=seed if seed is not None else 42,
+                    n_jobs=1,
+                )
+                importance = {
+                    str(name): round(float(imp.importances_mean[index]), 6)
+                    for index, name in enumerate(feature_cols)
+                }
+            except Exception:
+                importance = {}
+        result["importance"] = importance
     return result
 
 
@@ -311,6 +377,7 @@ def _run_segments(
     seed: int,
     *,
     include_daily: bool = False,
+    include_importance: bool = False,
 ):
     train = labelled[labelled["split"] == "train"].dropna(subset=["label"]).copy()
     eval_frames = [
@@ -333,6 +400,9 @@ def _run_segments(
             x_eval,
             frame,
             include_daily=include_daily,
+                include_importance=include_importance,
+                feature_cols=feature_cols,
+                seed=seed,
         )
         for (name, (x_eval, frame)) in zip(eval_names, transformed)
     }
@@ -422,6 +492,7 @@ def run_holdout_test(
     split: SplitResult,
     *,
     seed: int = 42,
+    include_trust: bool = False,
 ) -> Dict[str, Any]:
     """锁定配置的独立测试入口；只提供 C 的 oracle 调用，B 不自行判决。"""
     started = time.perf_counter()
@@ -431,7 +502,14 @@ def run_holdout_test(
     out["error"] = None
     try:
         labelled = add_features(split.frame, normalized["feature_set"])
-        results, _model = _run_segments(normalized, labelled, ("test",), seed)
+        results, _model = _run_segments(
+            normalized,
+            labelled,
+            ("test",),
+            seed,
+            include_daily=include_trust,
+            include_importance=include_trust,
+        )
         out["test"] = results["test"]
     except Exception as exc:  # noqa: BLE001
         out["error"] = "%s: %s" % (type(exc).__name__, exc)

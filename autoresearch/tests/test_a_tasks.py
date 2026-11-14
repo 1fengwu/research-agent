@@ -18,7 +18,12 @@ from autoresearch.contracts import (
     Verdict,
     load_task_spec,
 )
-from autoresearch.llm_router import ResearchRouter, _load_env_file
+from autoresearch.llm_router import (
+    ResearchRouter,
+    _load_env_file,
+    difficulty_score,
+    should_escalate,
+)
 
 
 class CloudEnvTestCase(unittest.TestCase):
@@ -47,6 +52,20 @@ class CloudEnvTestCase(unittest.TestCase):
                     os.environ.pop(key, None)
                 else:
                     os.environ[key] = old[key]
+
+
+class DifficultyGateTestCase(unittest.TestCase):
+    def test_window_conflict_raises_difficulty_and_triggers_cloud(self) -> None:
+        state = {
+            "data_anomaly": False,
+            "stall_rounds": 0,
+            "window_conflict": True,
+            "critical_decision": False,
+            "repeated_error_signature": False,
+            "phase": "VERIFIED",
+        }
+        self.assertGreaterEqual(difficulty_score(state), 2)
+        self.assertIn("difficulty_high", should_escalate(state))
 
 
 class FakeCloudClient:

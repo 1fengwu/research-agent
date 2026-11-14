@@ -23,6 +23,15 @@ Research Agent System 的竞赛交付仓库：面向量价信号验证场景，�
 - A/B/C/D 模块说明：[autoresearch/README.md](autoresearch/README.md)
 - D 页面入口：[autoresearch/app.py](autoresearch/app.py)
 
+## 干净环境启动
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1
+powershell -ExecutionPolicy Bypass -File scripts/run_all.ps1
+```
+
+依赖版本锁定在 `requirements-lock.txt`，页面额外依赖在 `requirements-app.txt`。
+
 ## 上传注意
 
 仓库不包含 `.env`、`.arc` 运行目录、`__pycache__`、`.pyc`、SQLite 数据库、依赖缓存和构建产物；相关文件由 `.gitignore` 排除。
