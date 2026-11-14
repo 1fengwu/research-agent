@@ -22,6 +22,7 @@ from autoresearch.llm_router import (
     ResearchRouter,
     _load_env_file,
     difficulty_score,
+    parse_json_content,
     should_escalate,
 )
 
@@ -426,6 +427,18 @@ class AgentATest(unittest.TestCase):
             self.assertGreaterEqual(client.calls, 1)
             self.assertTrue(any(e["type"] == "research.escalation_invalid" for e in events(folder)))
             self.assertTrue(summary["tested"])
+
+    def test_cloud_reply_wrapped_in_prose_is_parsed(self) -> None:
+        content = (
+            "Here is the plan: ```json\n"
+            '{"decision": "retry_with_fallback_feature_set", '
+            '"evidence_ids": ["E1"], "actions": [{"action": "replan"}]}\n'
+            "```\nDone."
+        )
+        parsed = parse_json_content(content)
+        self.assertIsInstance(parsed, dict)
+        self.assertEqual(parsed["decision"], "retry_with_fallback_feature_set")
+        self.assertEqual(parsed["evidence_ids"], ["E1"])
 
     def test_repeated_error_signature_triggers_escalation(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
